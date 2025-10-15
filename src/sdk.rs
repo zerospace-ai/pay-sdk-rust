@@ -12,55 +12,42 @@ use std::fs;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// API 密钥
     #[serde(rename = "ApiKey")]
     pub api_key: String,
 
-    /// API 密钥（敏感信息）
     #[serde(rename = "ApiSecret")]
     pub api_secret: String,
 
-    /// 平台公钥（Base64 编码的 PKCS#8 格式）
     #[serde(rename = "PlatformPubKey")]
     pub platform_pub_key: String,
 
-    /// 平台风险控制公钥（Base64 编码的 PKCS#8 格式）
     #[serde(rename = "PlatformRiskPubKey")]
     pub platform_risk_pub_key: String,
 
-    /// 用户的 RSA 私钥（Base64 编码的 PKCS#8 格式）
     #[serde(rename = "RsaPrivateKey")]
     pub rsa_private_key: String,
 
-    /// 用户的开放 ID
     #[serde(rename = "UserOpenId")]
     pub user_open_id: String,
 
-    /// 区块链网络 ID
     #[serde(rename = "ChainID")]
     pub chain_id: String,
 
-    /// 代币 ID
     #[serde(rename = "TokenId")]
     pub token_id: String,
 
-    /// 交易金额（字符串格式，可能需要进一步解析为数字）
     #[serde(rename = "Amount")]
     pub amount: String,
 
-    /// 目标地址
     #[serde(rename = "AddressTo")]
     pub address_to: String,
 
-    /// 安全检查码
     #[serde(rename = "SafeCheckCode")]
     pub safe_check_code: String,
 
-    /// 回调 URL
     #[serde(rename = "CallbackUrl")]
     pub callback_url: String,
 
-    /// 区块链网络 ID 列表（逗号分隔或 JSON 数组）
     #[serde(rename = "ChainIDs")]
     pub chain_ids: String,
 }

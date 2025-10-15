@@ -71,7 +71,7 @@ pub struct RequestTokenCb {
     pub token_id: String,
 
     #[serde(rename = "type")]
-    pub type_field: String, // Rust 中 type 是关键字，需要改名
+    pub type_field: String,
 
     #[serde(rename = "fee")]
     pub fee: String,
