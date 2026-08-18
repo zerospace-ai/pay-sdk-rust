@@ -1,5 +1,6 @@
 use crate::request_define::{
-    RequestCreateUser, RequestCreateWallet, RequestGetWalletAddresses, RequestWithdrawByOpenID,
+    RequestCreateUser, RequestCreateWallet, RequestGetWalletAddresses, RequestNewOrder,
+    RequestWalletBalance, RequestWithdrawByOpenID,
 };
 use crate::rsa_utils;
 use anyhow::Result;
@@ -12,44 +13,81 @@ use std::fs;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
+    /// API Key
     #[serde(rename = "ApiKey")]
     pub api_key: String,
 
+    /// API Secret (sensitive information)
     #[serde(rename = "ApiSecret")]
     pub api_secret: String,
 
+    /// Platform Public Key (Base64 encoded PKCS#8 format)
     #[serde(rename = "PlatformPubKey")]
     pub platform_pub_key: String,
 
+    /// Platform Risk Control Public Key (Base64 encoded PKCS#8 format)
     #[serde(rename = "PlatformRiskPubKey")]
     pub platform_risk_pub_key: String,
 
+    /// User RSA Private Key (Base64 encoded PKCS#8 format)
     #[serde(rename = "RsaPrivateKey")]
     pub rsa_private_key: String,
 
-    #[serde(rename = "UserOpenId")]
+    /// User Open ID
+    #[serde(rename = "UserOpenId", default)]
     pub user_open_id: String,
 
-    #[serde(rename = "ChainID")]
+    /// Blockchain Network ID
+    #[serde(rename = "ChainID", default)]
     pub chain_id: String,
 
-    #[serde(rename = "TokenId")]
+    /// Token ID
+    #[serde(rename = "TokenId", default)]
     pub token_id: String,
 
-    #[serde(rename = "Amount")]
+    /// Transaction amount (string format, may need further parsing to number)
+    #[serde(rename = "Amount", default)]
     pub amount: String,
 
-    #[serde(rename = "AddressTo")]
+    /// Target address
+    #[serde(rename = "AddressTo", default)]
     pub address_to: String,
 
-    #[serde(rename = "SafeCheckCode")]
+    /// Security check code
+    #[serde(rename = "SafeCheckCode", default)]
     pub safe_check_code: String,
 
-    #[serde(rename = "CallbackUrl")]
+    /// Callback URL
+    #[serde(rename = "CallbackUrl", default)]
     pub callback_url: String,
 
-    #[serde(rename = "ChainIDs")]
+    /// Blockchain Network ID list (comma-separated or JSON array)
+    #[serde(rename = "ChainIDs", default)]
     pub chain_ids: String,
+
+    /// External order number (used for cashier and other new interfaces)
+    #[serde(rename = "OutOrderNo", default)]
+    pub out_order_no: String,
+
+    /// Quantity (used for cashier and other new interfaces)
+    #[serde(rename = "Quantity", default)]
+    pub quantity: f64,
+
+    /// Async callback notification URL (used for cashier and other new interfaces)
+    #[serde(rename = "NotifyUrl", default)]
+    pub notify_url: String,
+
+    /// Wallet address
+    #[serde(rename = "WalletAddress", default)]
+    pub wallet_address: String,
+
+    /// Contract address / Token symbol
+    #[serde(rename = "ContractAddress", default)]
+    pub contract_address: String,
+
+    /// Query wallet balance chain ID
+    #[serde(rename = "WalletBalanceChainId", default)]
+    pub wallet_balance_chain_id: i64,
 }
 pub fn load_config(path: &str) -> anyhow::Result<Config> {
     let content = fs::read_to_string(path)?;
@@ -153,14 +191,52 @@ impl Sdk {
         self.sign_pack(req)
     }
 
+    pub fn new_order(
+        &self,
+        out_order_no: &str,
+        token_id: i32,
+        quantity: f64,
+        notify_url: Option<String>,
+    ) -> Result<(String, String, String, String)> {
+        let req = RequestNewOrder {
+            out_order_no: out_order_no.to_string(),
+            token_id,
+            quantity,
+            notify_url,
+        };
+        self.sign_pack(req)
+    }
+
+    pub fn get_wallet_balance(
+        &self,
+        address: &str,
+        contract_address: &str,
+        chain_id: i64,
+    ) -> Result<(String, String, String, String)> {
+        let req = RequestWalletBalance {
+            address: address.to_string(),
+            contract_address: contract_address.to_string(),
+            chain_id,
+        };
+        self.sign_pack(req)
+    }
+
+    pub fn wallet_balance(
+        &self,
+        address: &str,
+        contract_address: &str,
+        chain_id: i64,
+    ) -> Result<(String, String, String, String)> {
+        self.get_wallet_balance(address, contract_address, chain_id)
+    }
+
     fn sign_pack<T: serde::Serialize>(&self, req: T) -> Result<(String, String, String, String)> {
-        let map_data: HashMap<String, String> =
-            serde_json::from_value(serde_json::to_value(&req)?)?;
+        let j_str = serde_json::to_string(&req)?;
+        let map_data = rsa_utils::to_string_map(&j_str)?;
         let data_str = rsa_utils::compose_params(&map_data);
         let timestamp = Utc::now().timestamp_millis().to_string();
         let sign = self.generate_md5_sign(&data_str, &timestamp);
         let client_sign = self.generate_rsa_signature(&map_data)?;
-        let j_str = serde_json::to_string(&req)?;
         Ok((j_str, timestamp, sign, client_sign))
     }
 }

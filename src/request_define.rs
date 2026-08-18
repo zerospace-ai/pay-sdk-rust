@@ -71,7 +71,7 @@ pub struct RequestTokenCb {
     pub token_id: String,
 
     #[serde(rename = "type")]
-    pub type_field: String,
+    pub type_field: String, // 'type' is a reserved keyword in Rust, renamed to type_field
 
     #[serde(rename = "fee")]
     pub fee: String,
@@ -91,3 +91,24 @@ pub struct RequestWithdrawByOpenID {
     #[serde(rename = "SafeCheckCode")]
     pub safe_check_code: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RequestNewOrder {
+    #[serde(rename = "outOrderNo")]
+    pub out_order_no: String,
+    #[serde(rename = "tokenId")]
+    pub token_id: i32,
+    pub quantity: f64,
+    #[serde(rename = "notifyUrl", skip_serializing_if = "Option::is_none")]
+    pub notify_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RequestWalletBalance {
+    pub address: String,
+    #[serde(rename = "contractAddress")]
+    pub contract_address: String,
+    #[serde(rename = "chainId")]
+    pub chain_id: i64,
+}
+

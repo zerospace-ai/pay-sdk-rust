@@ -1,81 +1,44 @@
-# Примеры 📝
+# Примеры и инструменты
 
-Этот документ предоставляет примеры использования CryptoPay Rust SDK, включая запуск Demo, генерацию ключей и обработку обратных вызовов.
+Этот документ разделен на две части:
+1. **Примеры кода на основе сценариев:** Демонстрирует, как обрабатывать вызовы API и проверки в практическом коде.
+2. **Руководство по инструментам CLI:** Объясняет, как использовать скомпилированные исполняемые файлы, поставляемые с SDK, для быстрого тестирования.
 
-## 1 Объект экземпляра SDK 🛠️
+---
 
-### 1.1 Необходимая конфигурация ⚙️
+## 1. Примеры кода на основе сценариев
 
-1. Зарегистрируйте название вашего бизнеса и получите `ApiKey` и `ApiSecret`;
+### 1.1 Полный вызов API и проверка ответа
 
-2. Сгенерируйте свою собственную пару ключей `RSA`;
-
-3. Подготовьте публичный ключ `RSA` платформы;
-
-### 1.2 Создание объекта подписи 🔏
-
-1. Добавьте файл конфигурации `config.yaml`.
-
-```yaml
-# Настройка информации о бизнесе
-ApiKey: ""
-ApiSecret: ""
-# Публичный ключ платформы
-PlatformPubKey: ""
-# Публичный ключ для блокировки платформы
-PlatformRiskPubKey: ""
-# Ваш собственный приватный ключ
-RsaPrivateKey: ""
-```
-
-2. Загрузите файл конфигурации и создайте объект API.
+В следующем коде показано, как использовать SDK для создания запроса "Создать пользователя", отправки HTTP-запроса и проверки безопасности подписи данных, возвращаемых платформой.
 
 ```rust
+use pay_sdk_rust::{
+    response_define::ResponseCommon,
+    rsa_utils,
+    sdk::{load_config, SDKConfig, Sdk},
+};
+use reqwest::Client;
 
-	let cfg = load_config("./config.yaml")?;
-    
-    let sdk_config = SDKConfig {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. Инициализировать SDK
+    let cfg = load_config("./config.yaml")?;
+    let sdk = Sdk::new(SDKConfig {
         api_key: cfg.api_key,
         api_secret: cfg.api_secret,
         platform_pub_key: cfg.platform_pub_key,
         platform_risk_pub_key: cfg.platform_risk_pub_key,
         rsa_private_key: cfg.rsa_private_key,
-    };
+    });
 
-```
-
-### 1.3 Создание и подпись данных запроса. ✍️
-
-Возьмем создание пользователя в качестве примера.
-
-```rust
-
-	// ....
-	let open_id = "user_002";
-
+    // 2. Сгенерировать параметры запроса и заголовок подписи
+    let open_id = "PT00001";
     let (req_body, timestamp, sign, client_sign) = sdk.create_user(open_id)?;
 
-
-```
-
-```rust
-	let map_data: HashMap<String, String> =
-            serde_json::from_value(serde_json::to_value(&req)?)?;
-	let data_str = rsa_utils::compose_params(&map_data);
-	let timestamp = Utc::now().timestamp_millis().to_string();
-	let sign = self.generate_md5_sign(&data_str, &timestamp);
-	let client_sign = self.generate_rsa_signature(&map_data)?;
-	let j_str = serde_json::to_string(&req)?;
-```
-
-### 1.4 Заполнение и инициирование запроса 🚀
-
-```rust
-	// ....
-	
+    // 3. Отправить HTTP-запрос
     let client = Client::new();
     let url = "https://sandbox-api.privatex.io/sdk/user/create";
-
     let resp = client.post(url)
         .header("Content-Type", "application/json")
         .header("key", sdk.config.api_key.clone())
@@ -87,71 +50,72 @@ RsaPrivateKey: ""
         .await?;
 
     let body = resp.text().await?;
-    println!("Response: {}", body);
-
-```
-
-### 1.5 Проверка и разбор возвращаемых данных ✅
-
-```rust
-
+    
+    // 4. Автоматически проверить подпись ответа
     let parsed: ResponseCommon = serde_json::from_str(&body)?;
-    println!("Parsed response: {:?}", parsed);
     if parsed.code != 1 {
-        return Err(anyhow::anyhow!("Error response: {}", parsed.msg));
-    }
-    match rsa_utils::to_string_map(&body) {
-        Ok(map_data) => {
-            match serde_json::from_str::<pay_sdk_rust::response_define::ResponseCreateUser>(&body) {
-                Ok(rsp_data) => {
-                    let sign = rsp_data.sign.clone();
-                    match sdk.verify_rsa_signature(&map_data, &sign) {
-                        Ok(_) => println!("verify signature success!"),
-                        Err(e) => eprintln!("verify signature failed: {:?}", e),
-                    }
-                }
-                Err(e) => eprintln!("parse JSON ResponseCreateUser failed: {:?}", e),
-            }
-        }
-        Err(e) => eprintln!("convert to map[string]string failed: {:?}", e),
+        println!("Запрос не удался: {}", parsed.msg);
+        return Ok(());
     }
 
+    let map_data = rsa_utils::to_string_map(&body)?;
+    let rsp_data: pay_sdk_rust::response_define::ResponseCreateUser = serde_json::from_str(&body)?;
+    
+    match sdk.verify_rsa_signature(&map_data, &rsp_data.sign) {
+        Ok(_) => println!("✅ Запрос успешен и проверен! Возвращенный OpenId: {}", rsp_data.data.open_id),
+        Err(e) => println!("❌ Ошибка проверки подписи: {:?}", e),
+    }
+
+    Ok(())
+}
 ```
 
-## 2. Генерация исполняемых команд интерфейса
 
-* 1. Выполните команду `cargo build --example create_user_client` в корневом каталоге SDK, чтобы сгенерировать бинарные исполняемые файлы для каждой функциональной команды в каталоге `pay-sdk-rust/target/debug/examples/`.
+---
 
-* 2. Файл с суффиксом ".exe" запускается на 64-битных машинах Windows; файл без суффикса ".exe" запускается на Linux/Mac. Например, create_user.exe и create_user исполняемые файлы.
+## 2. Руководство по использованию инструментов CLI
 
-* 3. Скопируйте настроенный файл config.yaml в каталог `pay-sdk-rust/target/debug/examples/`.
+SDK предоставляет бинарные файлы интерфейса командной строки (CLI) для быстрого тестирования каждой конечной точки API.
 
-## 3. Вызов команды 📞
+### 2.1 Компиляция исполняемых файлов
 
-### 3.1. Регистрация нового пользователя 🆕
+Выполните команду `cargo build --examples` в корневом каталоге SDK, и система сгенерирует бинарные исполняемые файлы для каждой функции в каталоге `target/debug/examples/`.
+* **Windows:** Генерирует файлы, оканчивающиеся на `.exe` (например, `create_user.exe`).
+* **Mac/Linux:** Генерирует файлы без суффиксов (например, `create_user`).
 
+### 2.2 Подготовка файла конфигурации
 
-Перейдите в каталог `pay-sdk-rust/target/debug/examples/` SDK и измените поле UserOpenId в файле config.yaml там.
+Перед запуском инструментов убедитесь, что настроенный файл `config.yaml` помещен в каталог выполнения (обычно это корневой каталог проекта или `target/debug/examples/`).
 
-Запустите исполняемый файл create_user или create_user.exe, чтобы зарегистрировать нового пользователя на платформе.
+### 2.3 Тестирование команд конечной точки
 
-Если вы попытаетесь зарегистрировать новый UserOpenId, который уже зарегистрирован, будет возвращена ошибка.
+#### Регистрация нового пользователя
+1. Измените поле `UserOpenId` в `config.yaml`.
+2. Запустите `cargo run --example create_user_client`.
+3. Если OpenId уже зарегистрирован, инструмент вернет ошибку.
 
+#### Регистрация кошелька
+1. Укажите `UserOpenId` и `ChainID` в `config.yaml`.
+2. Запустите `cargo run --example create_wallet`.
 
-### 3.2. Регистрация кошелька 💼
+#### Получение адресов для депозита
+1. Укажите `UserOpenId` и запрашиваемые `ChainIDs` (например, "1,56") в `config.yaml`.
+2. Запустите `cargo run --example get_wallet_addresses`.
 
-Перейдите в каталог `pay-sdk-rust/target/debug/examples/` SDK и укажите поля `UserOpenId` и `ChainID` в файле `config.yaml`.
+#### Запрос на вывод средств
+1. Укажите следующее в `config.yaml`:
+   * `UserOpenId`
+   * `TokenId`
+   * `Amount`
+   * `AddressTo`
+   * `SafeCheckCode` (Уникальный код для предотвращения дублирования заказов)
+   * `CallbackUrl`
+2. Запустите `cargo run --example user_withdraw_by_open_id`.
 
-Запустите исполняемый файл `create_wallet` или `create_wallet.exe`, чтобы завершить регистрацию кошелька пользователя на платформе.
+#### Создание кассового ордера
+1. Укажите `OutOrderNo`, `TokenId`, `Quantity` и `NotifyUrl` в `config.yaml`.
+2. Запустите `cargo run --example new_order`.
 
-### 3.3. Получение адреса пополнения 📍
-
-Перейдите в каталог `pay-sdk-rust/target/debug/examples/` SDK и укажите поля `UserOpenId` и `ChainIDs` в `config.yaml`.
-
-Запустите исполняемый файл `get_wallet_addresses` или `get_wallet_addresses.exe`.
-
-### 3.4. Вывод средств 💸
-
-Перейдите в каталог `pay-sdk-rust/target/debug/examples/` SDK и укажите поля `UserOpenId`, `TokenId`, `Amount`, `AddressTo`, `SafeCheckCode` и `CallbackUrl` в `config.yaml`.
-
-Запустите исполняемый файл `user_withdraw_by_open_id` или `user_withdraw_by_open_id.exe`.
+#### Запрос баланса кошелька
+1. Укажите `WalletAddress`, `ContractAddress` и `WalletBalanceChainId` в `config.yaml`.
+2. Запустите `cargo run --example wallet_balance`.

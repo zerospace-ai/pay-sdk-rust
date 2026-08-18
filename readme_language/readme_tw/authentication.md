@@ -1,45 +1,89 @@
-# 請求驗證頭
+# 認證與安全
 
-請求頭定義
+本系統使用嚴格的請求簽名機制來確保商戶與平台之間的數據安全。通信過程涉及 MD5 簽名和 RSA 簽名驗證。
 
-| 參數名稱   | 約束      | 範例                               | 描述                         |
-| :--------- | :-------- | :--------------------------------- | :--------------------------- |
-| key        | 長度：64  | ithujj3onrzbgw5t                   | 合作夥伴 key                 |
-| timestamp  | 長度：32  | 1722586649000                      | 請求發起時間戳（單位：毫秒） |
-| sign       | 長度：32  | 9e0ccfe3915e94bcc5bf7dd51ad4e8d9   | 合作夥伴 secret 簽名         |
-| clientSign | 長度：512 | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | 合作夥伴 RSA 簽名            |
+## 1. 生成 RSA 密鑰對
 
-## `sign` 字段規則
+商戶需要自己生成 RSA 密鑰對，使用私鑰對請求進行簽名，並將公鑰提交給平台。
 
-1. 註冊合作夥伴並獲取 `key` 和 `secret`。
-2. 解析請求。將 JSON body 按 JSON 中的鍵的 ASCII 升序排序，並連接字符串 dataStr=key1=value1&key2=value2&key3=value3&...
-3. 生成時間戳（單位：毫秒）
-4. 加密生成 sign：加密前明文：strToHash = Secret+dataStr+timestamp 對明文 strToHash 進行 MD5 加密生成 sign。
-具體代碼為 GenerateMD5Sign 函數。
-5. 將 key、timestamp 和 sign 放置在 HTTP 頭中。
+### 1.1 使用 OpenSSL 生成密鑰對
 
-## `clientSign` 簽名算法詳細解釋
+在 Mac、Linux 或 Git Bash/WSL/Cygwin 上執行以下命令：
 
-1. 獲取請求參數並格式化以獲取新的格式化字符串。
+```bash
+# 生成 2048 位私鑰
+openssl genrsa -out rsa_private_key.pem 2048
 
-2. 使用 RSA 私鑰對步驟 1 中的數據簽名，並將簽名結果保存到變量。
-生成以下參數數組的簽名字符串：`user_id = 1 coin = eth address = 0x038B8E7406dED2Be112B6c7E4681Df5316957cad amount = 10.001 trade_id = 20220131012030274786`
-將數組中的每個鍵從 a 到 z 排序。如果首字母相同，則查看第二個字母，依此類推。排序後，使用 & 字符連接所有數組值，例如在 $dataString 中：
-`address=0x038B8E7406dED2Be112B6c7E4681Df5316957cad&amount=10.001&coin=eth&trade_id=20220131012030274786&user_id=1`
-此字符串即為連接字符串。
+# 根據私鑰生成公鑰
+openssl rsa -in rsa_private_key.pem -out rsa_public_key.pem -pubout
+```
 
-3. 使用私鑰對數據進行 RSA-MD5 簽名。具體代碼在 generate_md5_sign 函數中。
+### 1.2 提取密鑰字符串
 
-# 公共信息
+生成的公鑰需要去掉開頭和結尾的 `-----BEGIN PUBLIC KEY-----` / `-----END PUBLIC KEY-----`，並去掉換行符，轉換為單行字符串後提交到平台。
 
-| 名稱       | 類型      | 範例                               | 描述                                   |
-| :--------- | :-------- | :--------------------------------- | :------------------------------------- |
-| 全局狀態碼 | integer   | 1                                  | 1 表示成功。詳細信息請參見全局狀態碼。 |
-| 消息       | string    | ok                                 | 返回文字信息。                         |
-| 數據       | json      | {"OpenID":"HEX..."}                | 返回特定數據內容。                     |
-| 時間       | timeStamp | 1722587274000                      | UTC 時間（無時區，以毫秒為單位）。     |
-| 簽名       | string    | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | 平台使用 RSA 對所有數據簽名。          |
+**在 Mac/Linux/Git Bash 上提取：**
 
-平台返回的 Sign 是使用 RSA 算法對響應數據加密的結果。前端應對返回數據驗證簽名。詳細信息請參考函數 func: 
+```bash
+# 提取私鑰字符串
+grep -v '^-----' rsa_private_key.pem | tr -d '\n'; echo
 
-pub fn verify_rsa_signature`
+# 提取公鑰字符串
+grep -v '^-----' rsa_public_key.pem | tr -d '\n'; echo
+```
+
+**在 Windows PowerShell 上提取：**
+
+```powershell
+# 提取私鑰
+Write-Output ((Get-Content rsa_private_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+
+# 提取公钥
+Write-Output ((Get-Content rsa_public_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+```
+
+> **⚠️ 注意：** 提取出的私鑰必須保存在本地服務器（填入 `config.yaml` 的 `RsaPrivateKey` 字段），**嚴禁洩露**。
+
+---
+
+## 2. 請求驗證頭定義
+
+在發起 HTTP 請求時，需要在 Header 中包含以下認證參數：
+
+| 參數名稱 | 約束 | 示例 | 說明 |
+| :--- | :--- | :--- | :--- |
+| `key` | 長度: 64 | `vratson2i5hjxgkd` | 商戶註冊後由平台分配的 API Key |
+| `timestamp` | 長度: 32 | `1725076567682` | 請求發起的時間戳 (單位: 毫秒) |
+| `sign` | 長度: 32 | `0592dc64d480fb119d1e07ce0601db` | 使用 MD5 算法對請求內容生成的簽名 |
+| `clientSign` | 長度: 512 | `9e0ccfe3915e94bcc5bfbBsC...` | 使用商戶的 RSA 私鑰對請求內容生成的簽名 |
+
+---
+
+## 3. 簽名算法詳細說明
+
+SDK 內部已經自動處理了所有簽名邏輯。如果你需要獨立開發其他語言版本，或者了解簽名的底層原理，請參考以下說明。
+
+### 3.1 `sign` 字段規則 (MD5 簽名)
+
+1. 獲取平台的 `Secret`。
+2. 將請求的 JSON body 按鍵的 ASCII 升序排序，並拼接成格式為 `key1=value1&key2=value2...` 的字符串，記為 `dataStr`。
+3. 獲取當前時間戳（毫秒）。
+4. 拼接待加密明文：`strToHash = Secret + dataStr + timestamp`。
+5. 對 `strToHash` 執行 MD5 加密，生成的結果即為 `sign`。
+
+### 3.2 `clientSign` 字段規則 (RSA 簽名)
+
+1. 將請求參數按照鍵的 ASCII 升序排序。
+2. 使用 `&` 字符連接所有數組值，例如：
+   `address=0x038B8...&amount=10.001&coin=eth&trade_id=2022013101`
+3. 使用商戶的 RSA 私鑰對此拼接字符串進行 `RSA-MD5` 簽名，生成的結果即為 `clientSign`。
+
+---
+
+## 4. 平台響應簽名驗證
+
+平台返回的數據中也會包含 `sign` 字段，這是平台使用其 RSA 私鑰對響應數據加密的結果。
+
+商戶端收到響應後，必須使用 `config.yaml` 中的 `PlatformPubKey`（平台公鑰）來驗證此簽名，以確保數據未被篡改。
+
+> **💡 提示：** Rust SDK 已提供 `verify_rsa_signature(&self, map_data: &HashMap<String, String>, sign: &str) -> Result<()>` 方法供開發者快捷驗證平台返回的數據。

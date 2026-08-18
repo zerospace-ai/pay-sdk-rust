@@ -1,24 +1,30 @@
 # CryptoPay Rust SDK
 
-![Rust Sürümü](https://img.shields.io/badge/rust-1.91+-blue.svg)
-[![Lisans: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Rust Version](https://img.shields.io/badge/rust-1.91+-blue.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Telegram](https://img.shields.io/badge/chat-Telegram-blue?logo=telegram)](https://t.me/ZeroSerivce)
 
-## 🌟 CryptoPay Rust SDK'ya Hoş Geldiniz
+## CryptoPay Rust SDK'ya Hoş Geldiniz
 
-CryptoPay Rust SDK, Rust ile uygulanan profesyonel bir kripto para hizmeti SDK'sıdır ve kullanıcı kaydı, cüzdan oluşturma, para yatırma geri çağrı bildirimleri, para çekme ve diğer işlevleri sağlar.
+CryptoPay Rust SDK, Rust ile uygulanan ve kullanıcı kaydı, cüzdan oluşturma, para yatırma geri çağırma (callback) bildirimleri ve para çekme gibi işlevler sağlayan profesyonel bir kripto para hizmeti SDK'sıdır.
+Yaygın olarak kullanılmış olup güvenli, kararlı ve kolayca genişletilebilir olduğu kanıtlanmıştır.
 
-Uzun süreli kullanım ile güvenli, istikrarlı ve genişletilmesi kolay olduğu kanıtlanmıştır.
+## Kurulum
 
-## ⚙️ Kurulum
+Add the dependency to your `Cargo.toml`:
 
-```bash
-git clone github.com/zerospace-ai/pay-sdk-rust.git
+```toml
+[dependencies]
+pay-sdk-rust = { git = "https://github.com/zerospace-ai/pay-sdk-rust.git" }
 ```
 
-Not: Derleme için rustc 1.91.0 gereklidir 🛠️.
-## 🚀 Hızlı Başlangıç
-### 1. ⚙️ config.yaml
+> **Not:** Derleme için Rust 1.91+ gerekir.
+
+## Hızlı Başlangıç
+
+### 1. Yapılandırmayı Hazırlama
+
+SDK'yı kullanmadan önce, tüccarın kimlik doğrulama bilgilerini ve genel/özel anahtarlarını içeren `config.yaml` yapılandırma dosyasını hazırlamanız gerekir:
 
 ```yaml
 ApiKey: "your_api_key"
@@ -28,106 +34,52 @@ PlatformRiskPubKey: "platform_risk_public_key"
 RsaPrivateKey: "your_rsa_private_key"
 ```
 
-Alan açıklamaları:
+> **💡 İpucu:** Tüccarın kendi RSA anahtar çiftini (`RsaPrivateKey`) nasıl oluşturacağı ve ayrıntılı kimlik doğrulama ile güvenlik mekanizmaları hakkında ayrıntılar için lütfen [Kimlik Doğrulama ve Güvenlik (authentication.md)](./authentication.md) bölümünü okuyun.
 
-• 🔑 ApiKey / ApiSecret:
+### 2. SDK'yı Başlatma ve İstek Gönderme
 
-Tüccar hesabı kaydederken platform tarafından atanır, API isteği kimlik doğrulaması için kullanılır ✅.
-
-• 🛡️ PlatformPubKey / PlatformRiskPubKey:
-
-Platform tarafından sağlanan genel anahtarlar, platform tarafından döndürülen verileri veya geri çağrı imzalarını doğrulamak için kullanılır, bilgi kaynaklarının güvenilir olmasını sağlar. PlatformRiskPubKey esas olarak risk kontrolü ile ilgili olay doğrulaması için kullanılır ⚠️.
-
-• 🗝️ RsaPrivateKey:
-
-Tüccar tarafından oluşturulan RSA özel anahtarı, istekleri imzalamak için kullanılır, istek içeriğinin değiştirilmediğini sağlar. Önemli not: Özel anahtar gizli tutulmalıdır 🔒, ifşa etmeyin 🚫.
-
-### 2. RSA Anahtar Çifti Oluşturma 🔐
-
-İstekleri imzalamak için RSA anahtar çifti kullanarak veri güvenliğini sağlar. Aşağıda farklı işletim sistemlerinde anahtar çifti oluşturma ve anahtar dizelerini çıkarma açıklanmaktadır.
-
-#### 2.1 OpenSSL Kullanarak Anahtar Çifti Oluşturma
-
-```bash
-# 2048-bit özel anahtar oluştur
-openssl genrsa -out rsa_private_key.pem 2048
-
-# Özel anahtardan genel anahtar oluştur
-openssl rsa -in rsa_private_key.pem -out rsa_public_key.pem -pubout
-```
-
-> 💡 İpucu: Oluşturulan genel anahtar, başlangıç ve bitiş -----BEGIN PUBLIC KEY----- / -----END PUBLIC KEY----- kaldırılmalı, satır sonları kaldırılmalı, tek satır dizesine dönüştürülmeli ve platforma gönderilmelidir.
-> 
-> Anahtar dizelerini çıkarın ve genel anahtarı platforma gönderin 📤.
->
->Mac ve Windows'ta RSA anahtar çiftlerini oluşturma komutları Linux ile aynıdır.
-
-#### 2.2 Anahtar Dizelerini Çıkarma 🔑
-
-Mac/Linux veya Git Bash/WSL/Cygwin'da:
-
-```bash
-# Özel anahtar dizesini çıkar
-grep -v '^-----' rsa_private_key.pem | tr -d '\n'; echo
-
-# Genel anahtar dizesini çıkar
-grep -v '^-----' rsa_public_key.pem | tr -d '\n'; echo
-```
-
-Windows
-
-PowerShell ile özel ve genel anahtar dizelerini çıkarma:
-
-```powershell
-# Özel anahtar
-Write-Output ((Get-Content rsa_private_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
-
-# Genel anahtar
-Write-Output ((Get-Content rsa_public_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
-```
-
-> ⚠️ Not: Oluşturulan özel anahtar güvenli tutulmalı ve sızdırılmamalıdır.
-
-
-### 🛠️ 3. SDK Örneği Oluşturma
+Aşağıda, SDK örneğini nasıl başlatacağınızı ve "Yeni Kullanıcı Oluştur" API'sini nasıl çağıracağınızı gösteren eksiksiz bir örnek bulunmaktadır:
 
 ```rust
-    let cfg = load_config("./config.yaml")?;
+use pay_sdk_rust::sdk::{Sdk, SDKConfig, load_config};
 
-    let sdk_config = SDKConfig {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. Yapılandırmayı yükle
+    let cfg = load_config("config.yaml")?;
+
+    // 2. SDK örneği oluştur
+    let sdk = Sdk::new(SDKConfig {
         api_key: cfg.api_key,
         api_secret: cfg.api_secret,
         platform_pub_key: cfg.platform_pub_key,
         platform_risk_pub_key: cfg.platform_risk_pub_key,
         rsa_private_key: cfg.rsa_private_key,
-    };
+    });
 
-    let sdk = Sdk::new(sdk_config);
-    
+    // 3. API Çağır: Yeni kullanıcı oluşturma isteği oluştur
+    let open_id = "PT00001"; // Kullanıcının benzersiz kimliği
+    let (req_body, timestamp, sign, client_sign) = sdk.create_user(open_id)?;
+
+    // (Ağ isteği yürütme ve yanıt ayrıştırma burada atlanmıştır)
+    println!("CreateUser isteği başarıyla oluşturuldu!");
+    println!("Body: {}", req_body);
+    println!("Headers: timestamp={}, sign={}, clientSign={}", timestamp, sign, client_sign);
+
+    Ok(())
+}
 ```
 
-## 🔑 Ana Kavramlar
+## Temel Kavramlar ve Gezinme
 
-- 🆔 **OpenId**: Kullanıcının benzersiz tanımlayıcısı, örneğin "HASH1756194148".
-- 🔐 **RSA Anahtarı**: İstekleri imzalamak ve doğrulamak için kullanılır, veri güvenliğini sağlar.
-- ✍️ **API İmzası**: İstekleri imzalamak için MD5 ve RSA algoritmalarını kullanır, değiştirilmediğini sağlar.
+Bu SDK'yı daha iyi kullanabilmek için geri kalan belgeleri aşağıdaki sırayla okumanızı öneririz:
 
-Ayrıntılı API açıklamaları için lütfen [🧩 api-reference.md](./api-reference.md) ve [🧩 examples.md](./examples.md) dosyalarına bakın.
+1. **[Kimlik Doğrulama ve Güvenlik (authentication.md)](./authentication.md)**: RSA anahtar çiftlerinin nasıl oluşturulacağını ve SDK ile platform arasındaki imza doğrulama mekanizmasını öğrenin.
+2. **[API Referansı (api-reference.md)](./api-reference.md)**: Desteklenen tüm API uç noktaları (örneğin, cüzdan oluşturma, para çekme) ve Webhook formatları için ayrıntılı talimatlar içerir.
+3. **[Örnekler ve Araçlar (examples.md)](./examples.md)**: Daha karmaşık senaryo tabanlı kod örneklerini ve SDK'nın yerleşik CLI araçlarının kullanım talimatlarını görün.
+4. **[Ek (appendix.md)](./appendix.md)**: Desteklenen ChainID'ler, token türleri ve sözleşme adresleri gibi statik sözlük bilgileri.
 
-Kimlik Doğrulama ve Güvenlik için lütfen [🧩 authentication.md](./authentication.md) dosyasına bakın
+## İletişim
 
-## 📎 Ek
-
-Daha ayrıntılı referanslar için lütfen [Ek](./appendix.md) belgesine bakın, aşağıdaki içerikleri içerir:
-
-- [🧩 ChainID Listesi](./appendix.md#-chainid-listesi)
-- [🏷️ Token Türleri](./appendix.md#-token-türü)
-- [🌐 Genel Bilgiler](./appendix.md#-genel-bilgiler)
-- [🔰 Token Temel Bilgileri](./appendix.md#-token-temel-bilgileri)
-
-> 💡 **İpucu**: Ek, desteklenen zincir bilgilerini, token türlerini ve genel token verilerini sağlar, geliştiricilerin SDK'yi entegre etmesini ve kullanmasını kolaylaştırır.
-
-## 📞 İletişim
-
-Herhangi bir sorunuz varsa, lütfen hizmet sağlayıcısıyla iletişime geçin.  
-💬 Telegram: [@ZeroSerivce](https://t.me/ZeroSerivce)
+Herhangi bir sorunuz varsa, lütfen servis sağlayıcısıyla iletişime geçin:  
+Telegram: [@ZeroSerivce](https://t.me/ZeroSerivce)

@@ -1,81 +1,44 @@
-# Örnekler 📝
+# Örnekler ve Araçlar
 
-Bu belge, CryptoPay Rust SDK'sı için kullanım örnekleri sağlar, Demo çalıştırma, anahtar üretimi ve geri arama işleme dahil.
+Bu belge iki bölüme ayrılmıştır:
+1. **Senaryo Tabanlı Kod Örnekleri:** Pratik kodda API çağrılarının ve doğrulamalarının nasıl işleneceğini gösterir.
+2. **CLI Araçları Kılavuzu:** Hızlı test için SDK'da bulunan derlenmiş yürütülebilir dosyaların nasıl kullanılacağını açıklar.
 
-## 1 SDK Örnek Nesnesi 🛠️
+---
 
-### 1.1 Gerekli Yapılandırma ⚙️
+## 1. Senaryo Tabanlı Kod Örnekleri
 
-1. İşletme adınızı kaydedin ve `ApiKey` ve `ApiSecret` elde edin;
+### 1.1 Tam API Çağrısı ve Yanıt Doğrulaması
 
-2. Kendi `RSA` anahtar çiftinizi üretin;
-
-3. Platformun `RSA` genel anahtarını hazırlayın;
-
-### 1.2 İmza Nesnesi Oluşturma 🔏
-
-1. Bir yapılandırma dosyası `config.yaml` ekleyin.
-
-```yaml
-# İşletme bilgilerini yapılandırın
-ApiKey: ""
-ApiSecret: ""
-# Platform genel anahtarı
-PlatformPubKey: ""
-# Platformu engellemek için genel anahtar
-PlatformRiskPubKey: ""
-# Kendi özel anahtarınız
-RsaPrivateKey: ""
-```
-
-2. Yapılandırma dosyasını yükleyin ve API nesnesini oluşturun.
+Aşağıdaki kod, bir "Kullanıcı Oluştur" isteği oluşturmak, HTTP isteğini göndermek ve platform tarafından döndürülen verilerin imzasının güvenliğini doğrulamak için SDK'nın nasıl kullanılacağını gösterir.
 
 ```rust
+use pay_sdk_rust::{
+    response_define::ResponseCommon,
+    rsa_utils,
+    sdk::{load_config, SDKConfig, Sdk},
+};
+use reqwest::Client;
 
-	let cfg = load_config("./config.yaml")?;
-    
-    let sdk_config = SDKConfig {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. SDK'yı başlat
+    let cfg = load_config("./config.yaml")?;
+    let sdk = Sdk::new(SDKConfig {
         api_key: cfg.api_key,
         api_secret: cfg.api_secret,
         platform_pub_key: cfg.platform_pub_key,
         platform_risk_pub_key: cfg.platform_risk_pub_key,
         rsa_private_key: cfg.rsa_private_key,
-    };
+    });
 
-```
-
-### 1.3 İstek Verilerini Oluşturma ve İmzalama ✍️
-
-Kullanıcı oluşturmayı örnek olarak kullanalım.
-
-```rust
-
-	// ....
-	let open_id = "user_002";
-
+    // 2. İstek parametrelerini ve imza başlığını oluştur
+    let open_id = "PT00001";
     let (req_body, timestamp, sign, client_sign) = sdk.create_user(open_id)?;
 
-
-```
-
-```rust
-	let map_data: HashMap<String, String> =
-            serde_json::from_value(serde_json::to_value(&req)?)?;
-	let data_str = rsa_utils::compose_params(&map_data);
-	let timestamp = Utc::now().timestamp_millis().to_string();
-	let sign = self.generate_md5_sign(&data_str, &timestamp);
-	let client_sign = self.generate_rsa_signature(&map_data)?;
-	let j_str = serde_json::to_string(&req)?;
-```
-
-### 1.4 İsteği Doldurma ve Başlatma 🚀
-
-```rust
-	// ....
-	
+    // 3. HTTP isteği gönder
     let client = Client::new();
     let url = "https://sandbox-api.privatex.io/sdk/user/create";
-
     let resp = client.post(url)
         .header("Content-Type", "application/json")
         .header("key", sdk.config.api_key.clone())
@@ -87,71 +50,72 @@ Kullanıcı oluşturmayı örnek olarak kullanalım.
         .await?;
 
     let body = resp.text().await?;
-    println!("Response: {}", body);
-
-```
-
-### 1.5 Dönüş Verilerini Doğrulama ve Ayrıştırma ✅
-
-```rust
-
+    
+    // 4. Yanıt imzasını otomatik olarak doğrula
     let parsed: ResponseCommon = serde_json::from_str(&body)?;
-    println!("Parsed response: {:?}", parsed);
     if parsed.code != 1 {
-        return Err(anyhow::anyhow!("Error response: {}", parsed.msg));
-    }
-    match rsa_utils::to_string_map(&body) {
-        Ok(map_data) => {
-            match serde_json::from_str::<pay_sdk_rust::response_define::ResponseCreateUser>(&body) {
-                Ok(rsp_data) => {
-                    let sign = rsp_data.sign.clone();
-                    match sdk.verify_rsa_signature(&map_data, &sign) {
-                        Ok(_) => println!("verify signature success!"),
-                        Err(e) => eprintln!("verify signature failed: {:?}", e),
-                    }
-                }
-                Err(e) => eprintln!("parse JSON ResponseCreateUser failed: {:?}", e),
-            }
-        }
-        Err(e) => eprintln!("convert to map[string]string failed: {:?}", e),
+        println!("İstek başarısız oldu: {}", parsed.msg);
+        return Ok(());
     }
 
+    let map_data = rsa_utils::to_string_map(&body)?;
+    let rsp_data: pay_sdk_rust::response_define::ResponseCreateUser = serde_json::from_str(&body)?;
+    
+    match sdk.verify_rsa_signature(&map_data, &rsp_data.sign) {
+        Ok(_) => println!("✅ İstek başarılı ve doğrulandı! Döndürülen OpenId: {}", rsp_data.data.open_id),
+        Err(e) => println!("❌ İmza doğrulaması başarısız oldu: {:?}", e),
+    }
+
+    Ok(())
+}
 ```
 
-## 2. Yürütülebilir Arayüz Komutları Oluşturma
 
-* 1. SDK kök dizininde `cargo build --example create_user_client` komutunu çalıştırarak `pay-sdk-rust/target/debug/examples/` dizininde her fonksiyon komutu için ikili yürütülebilir dosyalar üretin.
+---
 
-* 2. ".exe" sonekli dosya 64-bit Windows makinelerinde çalışır; soneksiz dosya Linux/Mac'te çalışır. Örneğin, create_user.exe ve create_user yürütülebilir dosyaları.
+## 2. CLI Araçları Kullanım Kılavuzu
 
-* 3. Yapılandırılmış config.yaml dosyasını `pay-sdk-rust/target/debug/examples/` dizinine kopyalayın.
+SDK, her API uç noktasını hızlı bir şekilde test etmek için Komut Satırı Arayüzü (CLI) ikili dosyaları sağlar.
 
-## 3. Komutu Çağırma 📞
+### 2.1 Yürütülebilir Dosyaları Derleme
 
-### 3.1. Yeni Kullanıcı Kaydetme 🆕
+SDK kök dizininde `cargo build --examples` komutunu çalıştırın ve sistem `target/debug/examples/` dizinindeki her işlev için ikili yürütülebilir dosyalar üretecektir.
+* **Windows:** `.exe` ile biten dosyalar oluşturur (örneğin, `create_user.exe`).
+* **Mac/Linux:** Uzantısız dosyalar oluşturur (örneğin, `create_user`).
 
+### 2.2 Yapılandırma Dosyasını Hazırlama
 
-SDK'nın `pay-sdk-rust/target/debug/examples/` dizinine gidin ve oradaki config.yaml dosyasındaki UserOpenId alanını değiştirin.
+Araçları çalıştırmadan önce, yapılandırılmış `config.yaml` dosyasının yürütme dizinine (genellikle proje kök dizini veya `target/debug/examples/`) yerleştirildiğinden emin olun.
 
-create_user veya create_user.exe yürütülebilir dosyasını çalıştırarak platformda yeni bir kullanıcı kaydedin.
+### 2.3 Uç Nokta Komutlarını Test Etme
 
-Zaten kaydedilmiş bir UserOpenId'yi kaydetmeye çalışırsanız, hata döndürülür.
+#### Yeni Kullanıcı Kaydet
+1. `config.yaml` içindeki `UserOpenId` alanını değiştirin.
+2. `cargo run --example create_user_client` komutunu çalıştırın.
+3. OpenId zaten kayıtlıysa, araç bir hata döndürür.
 
+#### Cüzdan Kaydı
+1. `config.yaml` içinde `UserOpenId` ve `ChainID` değerlerini belirtin.
+2. `cargo run --example create_wallet` komutunu çalıştırın.
 
-### 3.2. Cüzdan Kaydı 💼
+#### Para Yatırma Adreslerini Al
+1. `config.yaml` içinde `UserOpenId` ve sorgulanan `ChainIDs` değerlerini (örneğin, "1,56") belirtin.
+2. `cargo run --example get_wallet_addresses` komutunu çalıştırın.
 
-SDK'nın `pay-sdk-rust/target/debug/examples/` dizinine gidin ve `config.yaml` dosyasındaki `UserOpenId` ve `ChainID` alanlarını belirtin.
+#### Para Çekme Talebi
+1. `config.yaml` içinde aşağıdakileri belirtin:
+   * `UserOpenId`
+   * `TokenId`
+   * `Amount`
+   * `AddressTo`
+   * `SafeCheckCode` (Benzersiz sipariş tekrarlama önleme kodu)
+   * `CallbackUrl`
+2. `cargo run --example user_withdraw_by_open_id` komutunu çalıştırın.
 
-`create_wallet` veya `create_wallet.exe` yürütülebilir dosyasını çalıştırarak platformda kullanıcının cüzdan kaydını tamamlayın.
+#### Kasa Siparişi Oluştur
+1. `config.yaml` dosyasında `OutOrderNo`, `TokenId`, `Quantity` ve `NotifyUrl` bilgilerini belirtin.
+2. `cargo run --example new_order` komutunu çalıştırın.
 
-### 3.3. Yatırma Adresini Alma 📍
-
-SDK'nın `pay-sdk-rust/target/debug/examples/` dizinine gidin ve `config.yaml`deki `UserOpenId` ve `ChainIDs` alanlarını belirtin.
-
-`get_wallet_addresses` veya `get_wallet_addresses.exe` yürütülebilir dosyasını çalıştırın.
-
-### 3.4. Para Çekme 💸
-
-SDK'nın `pay-sdk-rust/target/debug/examples/` dizinine gidin ve `config.yaml`deki `UserOpenId`, `TokenId`, `Amount`, `AddressTo`, `SafeCheckCode` ve `CallbackUrl` alanlarını belirtin.
-
-`user_withdraw_by_open_id` veya `user_withdraw_by_open_id.exe` yürütülebilir dosyasını çalıştırın.
+#### Cüzdan Bakiyesini Sorgula
+1. `config.yaml` içinde `WalletAddress`, `ContractAddress` ve `WalletBalanceChainId` değerlerini belirtin.
+2. `cargo run --example wallet_balance` komutunu çalıştırın.

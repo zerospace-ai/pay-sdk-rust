@@ -32,6 +32,7 @@ async fn withdraw_callback(sdk: web::Data<Sdk>, body: web::Bytes) -> HttpRespons
         sign: "".into(),
     };
 
+    // Sign the response
     let rsp_map: HashMap<String, String> = serde_json::from_str(&serde_json::to_string(&rsp).unwrap()).unwrap();
     match sdk.generate_rsa_signature(&rsp_map) {
         Ok(sig) => rsp.sign = sig,

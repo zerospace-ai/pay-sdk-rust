@@ -1,45 +1,89 @@
-# Anfrage-Verifizierungs-Header
+# Authentifizierung und Sicherheit
 
-Definition des Anfrage-Headers
+Dieses System verwendet einen strengen Anfrage-Signatur-Mechanismus, um die Datensicherheit zwischen dem Händler und der Plattform zu gewährleisten. Der Kommunikationsprozess umfasst MD5-Signaturen und RSA-Signaturüberprüfungen.
 
-| Parametername | Einschränkungen | Beispiel                           | Beschreibung                                                |
-| :------------ | :-------------- | :--------------------------------- | :---------------------------------------------------------- |
-| key           | Länge: 64       | ithujj3onrzbgw5t                   | Partner-Schlüssel                                           |
-| timestamp     | Länge: 32       | 1722586649000                      | Zeitstempel der Anfrageinitiierung (Einheit: Millisekunden) |
-| sign          | Länge: 32       | 9e0ccfe3915e94bcc5bf7dd51ad4e8d9   | Partner-Secret-Signatur                                     |
-| clientSign    | Länge: 512      | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | Partner-RSA-Signatur                                        |
+## 1. RSA-Schlüsselpaar generieren
 
-## Regeln für das `sign`-Feld
+Händler müssen ihr eigenes RSA-Schlüsselpaar generieren, den privaten Schlüssel zum Signieren von Anfragen verwenden und den öffentlichen Schlüssel an die Plattform übermitteln.
 
-1. Registrieren Sie den Partner und erhalten Sie den `key` und `secret`.
-2. Parsen Sie die Anfrage. Sortieren Sie den JSON-Body nach aufsteigender ASCII-Reihenfolge der Schlüssel im JSON und verbinden Sie die Strings dataStr=key1=value1&key2=value2&key3=value3&...
-3. Generieren Sie einen Zeitstempel (Einheit: Millisekunden)
-4. Verschlüsseln und generieren Sie ein sign: Klartext vor der Verschlüsselung: strToHash = Secret+dataStr+timestamp Führen Sie eine MD5-Verschlüsselung des Klartexts strToHash durch, um das sign zu generieren.
-Der spezifische Code ist die GenerateMD5Sign-Funktion.
-5. Platzieren Sie den key, timestamp und sign im HTTP-Header.
+### 1.1 Schlüsselpaar mit OpenSSL generieren
 
-## Detaillierte Erklärung des `clientSign`-Signaturalgorithmus
+Führen Sie die folgenden Befehle unter Mac, Linux oder Git Bash/WSL/Cygwin aus:
 
-1. Erhalten Sie die Anfrageparameter und formatieren Sie sie, um eine neue formatierte Zeichenkette zu erhalten.
+```bash
+# 2048-Bit privaten Schlüssel generieren
+openssl genrsa -out rsa_private_key.pem 2048
 
-2. Signieren Sie die Daten aus Schritt 1 mit dem RSA-Privatschlüssel und speichern Sie das Signaturergebnis in einer Variable.
-Generieren Sie eine Signaturzeichenkette für das folgende Parameterarray: `user_id = 1 coin = eth address = 0x038B8E7406dED2Be112B6c7E4681Df5316957cad amount = 10.001 trade_id = 20220131012030274786`
-Sortieren Sie jeden Schlüssel im Array von a bis z. Wenn der erste Buchstabe gleich ist, schauen Sie auf den zweiten Buchstaben usw. Nach der Sortierung verbinden Sie alle Array-Werte mit dem Ampersand (&)-Zeichen, z.B. in $dataString:
-`address=0x038B8E7406dED2Be112B6c7E4681Df5316957cad&amount=10.001&coin=eth&trade_id=20220131012030274786&user_id=1`
-Diese Zeichenkette ist die verbundene Zeichenkette.
+# Öffentlichen Schlüssel aus dem privaten Schlüssel generieren
+openssl rsa -in rsa_private_key.pem -out rsa_public_key.pem -pubout
+```
 
-3. Verwenden Sie den Privatschlüssel, um die Daten mit RSA-MD5 zu signieren. Der spezifische Code ist in der generate_md5_sign-Funktion.
+### 1.2 Schlüssel-Strings extrahieren
 
-# Öffentliche Informationen
+Der generierte öffentliche Schlüssel muss ohne die Zeilen `-----BEGIN PUBLIC KEY-----` / `-----END PUBLIC KEY-----` und ohne Zeilenumbrüche vorliegen, bevor er in einem einzigen String an die Plattform gesendet wird.
 
-| Name                | Typ       | Beispiel                           | Beschreibung                                          |
-| :------------------ | :-------- | :--------------------------------- | :---------------------------------------------------- |
-| Globaler Statuscode | integer   | 1                                  | 1 bedeutet Erfolg. Details siehe Globaler Statuscode. |
-| Nachricht           | string    | ok                                 | Gibt Textinformationen zurück.                        |
-| Daten               | json      | {"OpenID":"HEX..."}                | Gibt spezifischen Dateninhalt zurück.                 |
-| Zeit                | timeStamp | 1722587274000                      | UTC-Zeit (ohne Zeitzone, in Millisekunden).           |
-| Sign                | string    | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | Die Plattform signiert alle Daten mit RSA.            |
+**Extrahieren unter Mac/Linux/Git Bash:**
 
-Das von der Plattform zurückgegebene Sign ist das Ergebnis der Verschlüsselung der Antwortdaten mit dem RSA-Algorithmus. Das Frontend sollte die Signatur gegen die zurückgegebenen Daten überprüfen. Für Details siehe die Funktion func: 
+```bash
+# Privaten Schlüssel-String extrahieren
+grep -v '^-----' rsa_private_key.pem | tr -d '\n'; echo
 
-pub fn verify_rsa_signature`
+# Öffentlichen Schlüssel-String extrahieren
+grep -v '^-----' rsa_public_key.pem | tr -d '\n'; echo
+```
+
+**Extrahieren unter Windows PowerShell:**
+
+```powershell
+# Privaten Schlüssel extrahieren
+Write-Output ((Get-Content rsa_private_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+
+# Öffentlichen Schlüssel extrahieren
+Write-Output ((Get-Content rsa_public_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+```
+
+> **⚠️ Achtung:** Der extrahierte private Schlüssel muss sicher auf Ihrem lokalen Server gespeichert werden (eingetragen im Feld `RsaPrivateKey` der `config.yaml`) und **darf niemals weitergegeben werden**.
+
+---
+
+## 2. Definition der Validierungs-Header
+
+Beim Senden einer HTTP-Anfrage müssen die folgenden Authentifizierungsparameter im Header enthalten sein:
+
+| Parametername | Bedingung | Beispiel | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `key` | Länge: 64 | `vratson2i5hjxgkd` | API Key, der von der Plattform nach der Händlerregistrierung vergeben wurde |
+| `timestamp` | Länge: 32 | `1725076567682` | Zeitstempel der Anfrage (Einheit: Millisekunden) |
+| `sign` | Länge: 32 | `0592dc64d480fb119d1e07ce0601db` | Signatur, die mit dem MD5-Algorithmus aus dem Anfrageinhalt generiert wurde |
+| `clientSign` | Länge: 512 | `9e0ccfe3915e94bcc5bfbBsC...` | Signatur, die mit dem privaten RSA-Schlüssel des Händlers aus dem Anfrageinhalt generiert wurde |
+
+---
+
+## 3. Detaillierter Signaturalgorithmus
+
+Das SDK behandelt die gesamte Signaturlogik intern automatisch. Wenn Sie eine Version in einer anderen Sprache unabhängig entwickeln oder die zugrunde liegenden Prinzipien der Signatur verstehen müssen, beachten Sie die folgenden Anweisungen.
+
+### 3.1 Regeln für das `sign`-Feld (MD5-Signatur)
+
+1. Rufen Sie das `Secret` der Plattform ab.
+2. Sortieren Sie den JSON-Body der Anfrage in aufsteigender ASCII-Reihenfolge nach Schlüsseln und verketten Sie ihn zu einem String im Format `key1=value1&key2=value2...`, bezeichnet als `dataStr`.
+3. Rufen Sie den aktuellen Zeitstempel (Millisekunden) ab.
+4. Verbinden Sie den zu verschlüsselnden Klartext: `strToHash = Secret + dataStr + timestamp`.
+5. Führen Sie eine MD5-Verschlüsselung für `strToHash` durch. Das generierte Ergebnis ist das `sign`.
+
+### 3.2 Regeln für das `clientSign`-Feld (RSA-Signatur)
+
+1. Sortieren Sie die Anfrageparameter in aufsteigender ASCII-Reihenfolge nach Schlüsseln.
+2. Verbinden Sie alle Array-Werte mit dem Zeichen `&`, zum Beispiel:
+   `address=0x038B8...&amount=10.001&coin=eth&trade_id=2022013101`
+3. Verwenden Sie den privaten RSA-Schlüssel des Händlers, um eine `RSA-MD5`-Signatur für diesen verketteten String durchzuführen. Das generierte Ergebnis ist das `clientSign`.
+
+---
+
+## 4. Überprüfung der Signatur der Plattformantwort
+
+Die von der Plattform zurückgegebenen Daten enthalten ebenfalls ein `sign`-Feld, welches das Ergebnis der Verschlüsselung der Antwortdaten durch die Plattform mit ihrem privaten RSA-Schlüssel ist.
+
+Nachdem der Händler die Antwort erhalten hat, muss er dieses Signatur mit dem `PlatformPubKey` (öffentlicher Schlüssel der Plattform) in `config.yaml` überprüfen, um sicherzustellen, dass die Daten nicht manipuliert wurden.
+
+> **💡 Tipp:** Das Rust SDK bietet die Methode `verify_rsa_signature(&self, map_data: &HashMap<String, String>, sign: &str) -> Result<()>` für Entwickler, um die von der Plattform zurückgegebenen Daten schnell zu überprüfen.

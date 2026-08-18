@@ -4,21 +4,27 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Telegram](https://img.shields.io/badge/chat-Telegram-blue?logo=telegram)](https://t.me/ZeroSerivce)
 
-## 🌟 Willkommen zum CryptoPay Rust SDK
+## Willkommen beim CryptoPay Rust SDK
 
-CryptoPay Rust SDK ist ein professionelles Kryptowährungs-Service-SDK, das in Rust implementiert ist und Funktionen wie Benutzerregistrierung, Wallet-Generierung, Einzahlungs-Callback-Benachrichtigungen, Auszahlungen und mehr bietet.
+Das CryptoPay Rust SDK ist ein professionelles Kryptowährungs-Service-SDK, das in Rust implementiert ist. Es bietet Funktionen wie Benutzerregistrierung, Wallet-Erstellung, Einzahlungs-Rückrufbenachrichtigungen und Auszahlungen.
+Es ist weit verbreitet und hat sich als sicher, stabil und leicht erweiterbar erwiesen.
 
-Es hat sich durch langfristige Nutzung als sicher, stabil und leicht erweiterbar erwiesen.
+## Installation
 
-## ⚙️ Installation
+Add the dependency to your `Cargo.toml`:
 
-```bash
-git clone github.com/zerospace-ai/pay-sdk-rust.git
+```toml
+[dependencies]
+pay-sdk-rust = { git = "https://github.com/zerospace-ai/pay-sdk-rust.git" }
 ```
 
-Hinweis: Die Kompilierung erfordert rustc 1.91.0 🛠️.
-## 🚀 Schnellstart
-### 1. ⚙️ config.yaml
+> **Hinweis:** Die Kompilierung erfordert Rust 1.91+.
+
+## Schnellstart
+
+### 1. Konfiguration vorbereiten
+
+Bevor Sie das SDK verwenden, müssen Sie die Konfigurationsdatei `config.yaml` vorbereiten, die die Authentifizierungsinformationen des Händlers und die öffentlichen/privaten Schlüssel enthält:
 
 ```yaml
 ApiKey: "your_api_key"
@@ -28,106 +34,52 @@ PlatformRiskPubKey: "platform_risk_public_key"
 RsaPrivateKey: "your_rsa_private_key"
 ```
 
-Feld-Beschreibungen:
+> **💡 Tipp:** Für Details zur Generierung des eigenen RSA-Schlüsselpaars (`RsaPrivateKey`) und zu den detaillierten Authentifizierungs- und Sicherheitsmechanismen lesen Sie bitte [Authentifizierung und Sicherheit (authentication.md)](./authentication.md).
 
-• 🔑 ApiKey / ApiSecret:
+### 2. SDK initialisieren und Anfrage senden
 
-Wird von der Plattform bei der Registrierung eines Händlerkontos zugewiesen, verwendet für die API-Anfrage-Authentifizierung ✅.
-
-• 🛡️ PlatformPubKey / PlatformRiskPubKey:
-
-Öffentliche Schlüssel, die von der Plattform bereitgestellt werden, verwendet zur Überprüfung von Daten oder Callback-Signaturen, die von der Plattform zurückgegeben werden, um zuverlässige Informationsquellen zu gewährleisten. PlatformRiskPubKey wird hauptsächlich für die Überprüfung risikobezogener Ereignisse verwendet ⚠️.
-
-• 🗝️ RsaPrivateKey:
-
-RSA-Privatschlüssel, der vom Händler generiert wird, verwendet zum Signieren von Anfragen, um sicherzustellen, dass der Anfrageinhalt nicht manipuliert wird. Wichtiger Hinweis: Der Privatschlüssel muss vertraulich gehalten werden 🔒, nicht preisgeben 🚫.
-
-### 2. RSA-Schlüsselpaar generieren 🔐
-
-Die Verwendung eines RSA-Schlüsselpaars zum Signieren von Anfragen gewährleistet die Datensicherheit. Im Folgenden wird beschrieben, wie ein Schlüsselpaar generiert und Schlüssel-Strings auf verschiedenen Betriebssystemen extrahiert werden.
-
-#### 2.1 Schlüsselpaar mit OpenSSL generieren
-
-```bash
-# 2048-Bit-Privatschlüssel generieren
-openssl genrsa -out rsa_private_key.pem 2048
-
-# Öffentlichen Schlüssel aus Privatschlüssel generieren
-openssl rsa -in rsa_private_key.pem -out rsa_public_key.pem -pubout
-```
-
-> 💡 Tipp: Der generierte öffentliche Schlüssel muss den Anfang und das Ende -----BEGIN PUBLIC KEY----- / -----END PUBLIC KEY----- entfernen, Zeilenumbrüche entfernen, in eine einzeilige Zeichenkette umwandeln und an die Plattform übermitteln.
-> 
-> Schlüssel-Strings extrahieren und den öffentlichen Schlüssel an die Plattform übermitteln 📤.
->
->Die Befehle zum Generieren von RSA-Schlüsselpaaren auf Mac und Windows sind die gleichen wie auf Linux.
-
-#### 2.2 Schlüssel-Strings extrahieren 🔑
-
-Auf Mac/Linux oder Git Bash/WSL/Cygwin:
-
-```bash
-# Privatschlüssel-String extrahieren
-grep -v '^-----' rsa_private_key.pem | tr -d '\n'; echo
-
-# Öffentlichen Schlüssel-String extrahieren
-grep -v '^-----' rsa_public_key.pem | tr -d '\n'; echo
-```
-
-Windows
-
-PowerShell extrahiert private und public key strings:
-
-```powershell
-# Privatschlüssel
-Write-Output ((Get-Content rsa_private_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
-
-# Öffentlicher Schlüssel
-Write-Output ((Get-Content rsa_public_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
-```
-
-> ⚠️ Hinweis: Der generierte Privatschlüssel muss sicher aufbewahrt werden und darf nicht durchsickern.
-
-
-### 🛠️ 3. SDK-Instanz erstellen
+Hier ist ein vollständiges Beispiel, das zeigt, wie die SDK-Instanz initialisiert und die API "Neuen Benutzer erstellen" aufgerufen wird:
 
 ```rust
-    let cfg = load_config("./config.yaml")?;
+use pay_sdk_rust::sdk::{Sdk, SDKConfig, load_config};
 
-    let sdk_config = SDKConfig {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. Konfiguration laden
+    let cfg = load_config("config.yaml")?;
+
+    // 2. SDK-Instanz erstellen
+    let sdk = Sdk::new(SDKConfig {
         api_key: cfg.api_key,
         api_secret: cfg.api_secret,
         platform_pub_key: cfg.platform_pub_key,
         platform_risk_pub_key: cfg.platform_risk_pub_key,
         rsa_private_key: cfg.rsa_private_key,
-    };
+    });
 
-    let sdk = Sdk::new(sdk_config);
-    
+    // 3. API aufrufen: Anfrage für neuen Benutzer erstellen
+    let open_id = "PT00001"; // Eindeutige Kennung des Benutzers
+    let (req_body, timestamp, sign, client_sign) = sdk.create_user(open_id)?;
+
+    // (Netzwerkanfrage und Antwort-Parsing werden hier weggelassen)
+    println!("CreateUser-Anfrage erfolgreich erstellt!");
+    println!("Body: {}", req_body);
+    println!("Headers: timestamp={}, sign={}, clientSign={}", timestamp, sign, client_sign);
+
+    Ok(())
+}
 ```
 
-## 🔑 Wichtige Konzepte
+## Wichtige Konzepte und Navigation
 
-- 🆔 **OpenId**: Einzigartige Benutzerkennung, z.B. "HASH1756194148".
-- 🔐 **RSA-Schlüssel**: Wird zum Signieren und Überprüfen von Anfragen verwendet, um die Datensicherheit zu gewährleisten.
-- ✍️ **API-Signatur**: Verwenden Sie MD5- und RSA-Algorithmen zum Signieren von Anfragen, um sicherzustellen, dass sie nicht manipuliert werden.
+Um dieses SDK optimal nutzen zu können, empfehlen wir, die restlichen Dokumente in dieser Reihenfolge zu lesen:
 
-Für detaillierte API-Beschreibungen siehe [🧩 api-reference.md](./api-reference.md) und [🧩 examples.md](./examples.md).
+1. **[Authentifizierung und Sicherheit (authentication.md)](./authentication.md)**: Erfahren Sie, wie Sie RSA-Schlüsselpaare generieren und den Signatur-Verifizierungsmechanismus zwischen SDK und Plattform verstehen.
+2. **[API-Referenz (api-reference.md)](./api-reference.md)**: Enthält detaillierte Anweisungen für alle unterstützten API-Endpunkte (z. B. Wallet-Erstellung, Auszahlung) und Webhook-Formate.
+3. **[Beispiele und Tools (examples.md)](./examples.md)**: Zeigt komplexere szenariobasierte Codebeispiele und Anweisungen zur Verwendung der integrierten CLI-Tools.
+4. **[Anhang (appendix.md)](./appendix.md)**: Statische Wörterbuchinformationen wie unterstützte ChainIDs, Token-Typen und Vertragsadressen.
 
-Für Authentifizierung & Sicherheit siehe [🧩 authentication.md](./authentication.md)
+## Kontakt
 
-## 📎 Anhang
-
-Für detailliertere Referenzen schauen Sie bitte in das [Anhang](./appendix.md)-Dokument, das folgende Inhalte enthält:
-
-- [🧩 ChainID-Liste](./appendix.md#-chainid-liste)
-- [🏷️ Token-Typen](./appendix.md#-token-typ)
-- [🌐 Öffentliche Informationen](./appendix.md#-öffentliche-informationen)
-- [🔰 Token-Grundinformationen](./appendix.md#-token-grundinformationen)
-
-> 💡 **Tipp**: Der Anhang bietet unterstützte Ketteninformationen, Token-Typen und öffentliche Token-Daten, was es Entwicklern erleichtert, das SDK zu integrieren und zu verwenden.
-
-## 📞 Kontakt
-
-Falls Sie Fragen haben, kontaktieren Sie bitte den Dienstleister.  
-💬 Telegram: [@ZeroSerivce](https://t.me/ZeroSerivce)
+Wenn Sie Fragen haben, kontaktieren Sie bitte den Dienstanbieter:  
+Telegram: [@ZeroSerivce](https://t.me/ZeroSerivce)

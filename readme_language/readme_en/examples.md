@@ -1,81 +1,44 @@
-# Examples 📝
+# Examples and Tools
 
-This document provides usage examples for the CryptoPay Rust SDK, including Demo running, key generation, and callback handling.
+This document is divided into two parts:
+1. **Scenario-Based Code Examples:** Demonstrates how to handle API calls and verification in practical code.
+2. **CLI Tools Guide:** Explains how to use the SDK's example programs for quick testing.
 
-## 1 SDK Instance Object 🛠️
+---
 
-### 1.1 Required Configuration ⚙️
+## 1. Scenario-Based Code Examples
 
-1. Register your business name and obtain the `ApiKey` and `ApiSecret`;
+### 1.1 Complete API Call and Response Verification
 
-2. Generate your own `RSA` key pair;
-
-3. Prepare the platform's `RSA` public key;
-
-### 1.2 Creating a Signature Object 🔏
-
-1. Add a configuration file `config.yaml`.
-
-```yaml
-# Configure business information
-ApiKey: ""
-ApiSecret: ""
-# Platform public key
-PlatformPubKey: ""
-# Public key for blocking the platform
-PlatformRiskPubKey: ""
-# Your own private key
-RsaPrivateKey: ""
-```
-
-2. Load the configuration file and create the API object.
+The following code demonstrates how to use the SDK to build a "Create User" request, send the HTTP request, and verify the security of the signature of the data returned by the platform.
 
 ```rust
+use pay_sdk_rust::{
+    response_define::ResponseCommon,
+    rsa_utils,
+    sdk::{load_config, SDKConfig, Sdk},
+};
+use reqwest::Client;
 
-	let cfg = load_config("./config.yaml")?;
-    
-    let sdk_config = SDKConfig {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. Initialize SDK (Prerequisite: config.yaml is configured)
+    let cfg = load_config("./config.yaml")?;
+    let sdk = Sdk::new(SDKConfig {
         api_key: cfg.api_key,
         api_secret: cfg.api_secret,
         platform_pub_key: cfg.platform_pub_key,
         platform_risk_pub_key: cfg.platform_risk_pub_key,
         rsa_private_key: cfg.rsa_private_key,
-    };
+    });
 
-```
-
-### 1.3 Create and sign the request data. ✍️
-
-Let's use user creation as an example.
-
-```rust
-
-	// ....
-	let open_id = "user_002";
-
+    // 2. Generate request parameters and signature Header
+    let open_id = "PT00001";
     let (req_body, timestamp, sign, client_sign) = sdk.create_user(open_id)?;
 
-
-```
-
-```rust
-	let map_data: HashMap<String, String> =
-            serde_json::from_value(serde_json::to_value(&req)?)?;
-	let data_str = rsa_utils::compose_params(&map_data);
-	let timestamp = Utc::now().timestamp_millis().to_string();
-	let sign = self.generate_md5_sign(&data_str, &timestamp);
-	let client_sign = self.generate_rsa_signature(&map_data)?;
-	let j_str = serde_json::to_string(&req)?;
-```
-
-### 1.4 Filling in and Initiating the Request 🚀
-
-```rust
-	// ....
-	
+    // 3. Send HTTP request
     let client = Client::new();
     let url = "https://sandbox-api.privatex.io/sdk/user/create";
-
     let resp = client.post(url)
         .header("Content-Type", "application/json")
         .header("key", sdk.config.api_key.clone())
@@ -87,71 +50,76 @@ Let's use user creation as an example.
         .await?;
 
     let body = resp.text().await?;
-    println!("Response: {}", body);
-
-```
-
-### 1.5 Verify parsing return data ✅
-
-```rust
-
+    
+    // 4. Automatically verify response signature
     let parsed: ResponseCommon = serde_json::from_str(&body)?;
-    println!("Parsed response: {:?}", parsed);
     if parsed.code != 1 {
-        return Err(anyhow::anyhow!("Error response: {}", parsed.msg));
-    }
-    match rsa_utils::to_string_map(&body) {
-        Ok(map_data) => {
-            match serde_json::from_str::<pay_sdk_rust::response_define::ResponseCreateUser>(&body) {
-                Ok(rsp_data) => {
-                    let sign = rsp_data.sign.clone();
-                    match sdk.verify_rsa_signature(&map_data, &sign) {
-                        Ok(_) => println!("verify signature success!"),
-                        Err(e) => eprintln!("verify signature failed: {:?}", e),
-                    }
-                }
-                Err(e) => eprintln!("parse JSON ResponseCreateUser failed: {:?}", e),
-            }
-        }
-        Err(e) => eprintln!("convert to map[string]string failed: {:?}", e),
+        println!("Request failed: {}", parsed.msg);
+        return Ok(());
     }
 
+    let map_data = rsa_utils::to_string_map(&body)?;
+    let rsp_data: pay_sdk_rust::response_define::ResponseCreateUser = serde_json::from_str(&body)?;
+    
+    match sdk.verify_rsa_signature(&map_data, &rsp_data.sign) {
+        Ok(_) => println!("✅ Request successful and verified! Returned OpenId: {}", rsp_data.data.open_id),
+        Err(e) => println!("❌ Signature verification failed: {:?}", e),
+    }
+
+    Ok(())
+}
 ```
 
-## 2. Generate Executable Interface Commands
+---
 
-* 1. Execute the `cargo build --example create_user_client` command in the SDK root directory to generate binary executable files for each function command in the `pay-sdk-rust/target/debug/examples/` directory.
+## 2. CLI Tools Usage Guide
 
-* 2. The file with the ".exe" suffix runs on 64-bit Windows machines; the file without the ".exe" suffix runs on Linux/Mac. For example, create_user.exe and create_user executable files.
+The SDK provides example command-line programs for quickly testing each API endpoint.
 
-* 3. Copy the configured config.yaml file to the bin directory.
+### 2.1 Compile Example Files
 
-## 3. Calling the Command 📞
+Run the following command in the SDK root directory to compile the examples:
 
-### 3.1. Registering a New User 🆕
+```bash
+cargo build --examples
+```
 
+The compiled binary files will be located in the `target/debug/examples/` directory.
+* **Windows:** Generates files ending in `.exe` (e.g., `create_user_client.exe`).
+* **Mac/Linux:** Generates files without suffixes (e.g., `create_user_client`).
 
-Rust to the SDK's `pay-sdk-rust/target/debug/examples/` directory and modify the UserOpenId field in the config.yaml file there.
+### 2.2 Prepare Configuration File
 
-Run the create_user or create_user.exe executable file to register a new user on the platform.
+Before running the tools, ensure that the configured `config.yaml` file is placed in the execution directory (usually the project root or `target/debug/examples/`).
 
-If you attempt to register a new UserOpenId that has already been registered, an error will be returned.
+### 2.3 Testing Endpoint Commands
 
+#### Register New User
+1. Modify the `UserOpenId` field in `config.yaml`.
+2. Run `cargo run --example create_user_client`.
 
-### 3.2. Wallet Registration 💼
+#### Wallet Registration
+1. Specify `UserOpenId` and `ChainID` in `config.yaml`.
+2. Run `cargo run --example create_wallet`.
 
-Rust to the SDK's `pay-sdk-rust/target/debug/examples/` directory and specify the `UserOpenId` and `ChainID` fields in the `config.yaml` file.
+#### Get Deposit Addresses
+1. Specify `UserOpenId` and the queried `ChainIDs` (e.g., "1,56") in `config.yaml`.
+2. Run `cargo run --example get_wallet_addresses`.
 
-Run the `create_wallet` or `create_wallet.exe` executable file to complete the user's wallet registration on the platform.
+#### Apply for Withdrawal
+1. Specify the following in `config.yaml`:
+   * `UserOpenId`
+   * `TokenId`
+   * `Amount`
+   * `AddressTo`
+   * `SafeCheckCode` (Unique order anti-duplication code)
+   * `CallbackUrl`
+2. Run `cargo run --example user_withdraw_by_open_id`.
 
-### 3.3. Get Deposit Address 📍
+#### Create Cashier Order
+1. Specify `OutOrderNo`, `TokenId`, `Quantity`, and `NotifyUrl` in `config.yaml`.
+2. Run `cargo run --example new_order`.
 
-Rust to the SDK's `pay-sdk-rust/target/debug/examples/` directory and specify the `UserOpenId` and `ChainIDs` fields in `config.yaml`.
-
-Run the `get_wallet_addresses` or `get_wallet_addresses.exe` executable file.
-
-### 3.4. Withdrawals 💸
-
-Rust to the SDK's `pay-sdk-rust/target/debug/examples/` directory and specify the `UserOpenId`, `TokenId`, `Amount`, `AddressTo`, `SafeCheckCode`, and `CallbackUrl` fields in `config.yaml`.
-
-Run the `user_withdraw_by_open_id` or `user_withdraw_by_open_id.exe` executable file.
+#### Query Wallet Balance
+1. Specify `WalletAddress`, `ContractAddress`, and `WalletBalanceChainId` in `config.yaml`.
+2. Run `cargo run --example wallet_balance`.

@@ -1,81 +1,44 @@
-# 示例 📝
+# 示例代码与工具
 
-本文档提供了 CryptoPay Rust SDK 的使用示例，包括 Demo 运行、密钥生成和回调处理。
+本文档分为两部分：
+1. **场景化代码示例：** 演示在实际代码中如何处理 API 的调用与验证。
+2. **命令行工具指南：** 介绍如何使用 SDK 附带的示例程序进行快速测试。
 
-## 1 SDK 实例对象 🛠️
+---
 
-### 1.1 所需配置 ⚙️
+## 1. 场景化代码示例
 
-1. 注册您的业务名称并获取 `ApiKey` 和 `ApiSecret`；
+### 1.1 完整的 API 调用与响应验证
 
-2. 生成您自己的 `RSA` 密钥对；
-
-3. 准备平台的 `RSA` 公钥；
-
-### 1.2 创建签名对象 🔏
-
-1. 添加配置文件 `config.yaml`。
-
-```yaml
-# 配置业务信息
-ApiKey: ""
-ApiSecret: ""
-# 平台公钥
-PlatformPubKey: ""
-# 用于阻塞平台的公钥
-PlatformRiskPubKey: ""
-# 您自己的私钥
-RsaPrivateKey: ""
-```
-
-2. 加载配置文件并创建 API 对象。
+以下代码展示了如何利用 SDK 构建一个“创建用户”请求，发送 HTTP 请求，并对平台返回的数据签名进行安全验证。
 
 ```rust
+use pay_sdk_rust::{
+    response_define::ResponseCommon,
+    rsa_utils,
+    sdk::{load_config, SDKConfig, Sdk},
+};
+use reqwest::Client;
 
-	let cfg = load_config("./config.yaml")?;
-    
-    let sdk_config = SDKConfig {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. 初始化 SDK (前提：config.yaml 已配置)
+    let cfg = load_config("./config.yaml")?;
+    let sdk = Sdk::new(SDKConfig {
         api_key: cfg.api_key,
         api_secret: cfg.api_secret,
         platform_pub_key: cfg.platform_pub_key,
         platform_risk_pub_key: cfg.platform_risk_pub_key,
         rsa_private_key: cfg.rsa_private_key,
-    };
+    });
 
-```
-
-### 1.3 创建并签名请求数据。 ✍️
-
-以用户创建为例。
-
-```rust
-
-	// ....
-	let open_id = "user_002";
-
+    // 2. 生成请求参数和签名 Header
+    let open_id = "PT00001";
     let (req_body, timestamp, sign, client_sign) = sdk.create_user(open_id)?;
 
-
-```
-
-```rust
-	let map_data: HashMap<String, String> =
-            serde_json::from_value(serde_json::to_value(&req)?)?;
-	let data_str = rsa_utils::compose_params(&map_data);
-	let timestamp = Utc::now().timestamp_millis().to_string();
-	let sign = self.generate_md5_sign(&data_str, &timestamp);
-	let client_sign = self.generate_rsa_signature(&map_data)?;
-	let j_str = serde_json::to_string(&req)?;
-```
-
-### 1.4 填充并发起请求 🚀
-
-```rust
-	// ....
-	
+    // 3. 发送 HTTP 请求
     let client = Client::new();
     let url = "https://sandbox-api.privatex.io/sdk/user/create";
-
     let resp = client.post(url)
         .header("Content-Type", "application/json")
         .header("key", sdk.config.api_key.clone())
@@ -87,71 +50,76 @@ RsaPrivateKey: ""
         .await?;
 
     let body = resp.text().await?;
-    println!("Response: {}", body);
-
-```
-
-### 1.5 验证解析返回数据 ✅
-
-```rust
-
+    
+    // 4. 自动验证响应签名
     let parsed: ResponseCommon = serde_json::from_str(&body)?;
-    println!("Parsed response: {:?}", parsed);
     if parsed.code != 1 {
-        return Err(anyhow::anyhow!("Error response: {}", parsed.msg));
-    }
-    match rsa_utils::to_string_map(&body) {
-        Ok(map_data) => {
-            match serde_json::from_str::<pay_sdk_rust::response_define::ResponseCreateUser>(&body) {
-                Ok(rsp_data) => {
-                    let sign = rsp_data.sign.clone();
-                    match sdk.verify_rsa_signature(&map_data, &sign) {
-                        Ok(_) => println!("verify signature success!"),
-                        Err(e) => eprintln!("verify signature failed: {:?}", e),
-                    }
-                }
-                Err(e) => eprintln!("parse JSON ResponseCreateUser failed: {:?}", e),
-            }
-        }
-        Err(e) => eprintln!("convert to map[string]string failed: {:?}", e),
+        println!("请求失败: {}", parsed.msg);
+        return Ok(());
     }
 
+    let map_data = rsa_utils::to_string_map(&body)?;
+    let rsp_data: pay_sdk_rust::response_define::ResponseCreateUser = serde_json::from_str(&body)?;
+    
+    match sdk.verify_rsa_signature(&map_data, &rsp_data.sign) {
+        Ok(_) => println!("✅ 请求成功并验证通过！返回的 OpenId: {}", rsp_data.data.open_id),
+        Err(e) => println!("❌ 签名验证失败: {:?}", e),
+    }
+
+    Ok(())
+}
 ```
 
-## 2. 生成可执行接口命令
+---
 
-* 1. 在 SDK 根目录执行 `cargo build --example create_user_client` 命令，在 `pay-sdk-rust/target/debug/examples/` 目录生成每个功能命令的二进制可执行文件。
+## 2. 命令行工具使用指南
 
-* 2. 带有 ".exe" 后缀的文件在 64 位 Windows 机器上运行；没有 ".exe" 后缀的文件在 Linux/Mac 上运行。例如，create_user.exe 和 create_user 可执行文件。
+SDK 提供了快速测试各接口的示例命令行程序。
 
-* 3. 将配置好的 config.yaml 文件复制到 pay-sdk-rust/target/debug/examples/ 目录。
+### 2.1 编译示例文件
 
-## 3. 调用命令 📞
+在 SDK 根目录下执行以下命令编译示例：
 
-### 3.1. 注册新用户 🆕
+```bash
+cargo build --examples
+```
 
+编译后的二进制文件将位于 `target/debug/examples/` 目录下。
+* **Windows:** 生成 `.exe` 结尾的文件（如 `create_user_client.exe`）。
+* **Mac/Linux:** 生成无后缀的文件（如 `create_user_client`）。
 
-转到 SDK 的 `pay-sdk-rust/target/debug/examples/` 目录，并在其中的 config.yaml 文件中修改 UserOpenId 字段。
+### 2.2 准备配置文件
 
-运行 create_user 或 create_user.exe 可执行文件，在平台上注册新用户。
+运行工具前，请确保将配置好的 `config.yaml` 文件放置在执行目录下（通常是项目根目录或 `target/debug/examples/`）。
 
-如果尝试注册已注册的新 UserOpenId，将返回错误。
+### 2.3 测试各接口命令
 
+#### 注册新用户
+1. 在 `config.yaml` 中修改 `UserOpenId` 字段。
+2. 运行 `cargo run --example create_user_client`。
 
-### 3.2. 钱包注册 💼
+#### 钱包注册
+1. 在 `config.yaml` 中指定 `UserOpenId` 和 `ChainID`。
+2. 运行 `cargo run --example create_wallet`。
 
-转到 SDK 的 bin 目录，并在 config.yaml 文件中指定 `UserOpenId` 和 `ChainID` 字段。
+#### 获取充值地址
+1. 在 `config.yaml` 中指定 `UserOpenId` 和需要查询的 `ChainIDs` (例如 "1,56")。
+2. 运行 `cargo run --example get_wallet_addresses`。
 
-运行 `create_wallet` 或 `create_wallet.exe` 可执行文件，完成用户在平台上的钱包注册。
+#### 申请提现
+1. 在 `config.yaml` 中指定：
+   * `UserOpenId`
+   * `TokenId`
+   * `Amount`
+   * `AddressTo`
+   * `SafeCheckCode` (唯一的订单防重码)
+   * `CallbackUrl`
+2. 运行 `cargo run --example user_withdraw_by_open_id`。
 
-### 3.3. 获取充值地址 📍
+#### 创建收银台订单
+1. 在 `config.yaml` 中指定 `OutOrderNo`, `TokenId`, `Quantity`, `NotifyUrl`。
+2. 运行 `cargo run --example new_order`。
 
-转到 SDK 的 bin 目录，并在 config.yaml 中指定 `UserOpenId` 和 `ChainIDs` 字段。
-
-运行 `get_wallet_addresses` 或 `get_wallet_addresses.exe` 可执行文件。
-
-### 3.4. 提现 💸
-
-转到 SDK 的 bin 目录，并在 config.yaml 中指定 `UserOpenId`、`TokenId`、`Amount`、`AddressTo`、`SafeCheckCode` 和 `CallbackUrl` 字段。
-
-运行 `user_withdraw_by_open_id` 或 `user_withdraw_by_open_id.exe` 可执行文件。
+#### 查询钱包余额
+1. 在 `config.yaml` 中指定 `WalletAddress`, `ContractAddress`, `WalletBalanceChainId`。
+2. 运行 `cargo run --example wallet_balance`。

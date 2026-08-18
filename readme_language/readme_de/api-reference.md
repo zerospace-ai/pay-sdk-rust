@@ -1,32 +1,57 @@
-# API-Referenz 📚
+# API-Referenz
 
-Dieses Dokument beschreibt alle API-Schnittstellen des CryptoPay Rust SDK im Detail, einschließlich Anfrageparametern, Rückgabeparametern und Beispielen.
+Dieses Dokument enthält detaillierte Informationen zu allen API-Endpunkten des CryptoPay Rust SDK, einschließlich Anforderungsparametern, Rückgabeparametern und Beispielen.
 
-## Neuen Benutzer registrieren (create_user)🆕🧑‍💻
+## Inhaltsverzeichnis
 
-### Konzept
-Erstellen Sie einen neuen Plattformbenutzer, der die eindeutige ID des Benutzers erfordert, d.h. UserOpenId.
+1. [Globale öffentliche Informationen](#1-globale-öffentliche-informationen)
+2. [Neuen Benutzer erstellen (create_user)](#2-neuen-benutzer-erstellen-create_user)
+3. [Wallet erstellen (create_wallet)](#3-wallet-erstellen-create_wallet)
+4. [Einzahlungsadressen abrufen (get_wallet_addresses)](#4-einzahlungsadressen-abrufen-get_wallet_addresses)
+5. [Benutzerauszahlung (user_withdraw_by_open_id)](#5-benutzerauszahlung-user_withdraw_by_open_id)
+6. [Zweitprüfung für Auszahlungsaufträge (Webhook)](#6-zweitprüfung-für-auszahlungsaufträge-webhook)
+7. [Ein- und Auszahlungs-Rückrufbenachrichtigung (Webhook)](#7-ein--und-auszahlungs-rückrufbenachrichtigung-webhook)
+8. [Kassenbestellung erstellen (new_order)](#8-kassenbestellung-erstellen-new_order)
+9. [Kassenbestellung Zahlungsbestätigung Callback (Webhook)](#9-kassenbestellung-zahlungsbestätigung-callback-webhook)
+10. [Wallet-Guthaben abfragen (wallet_balance)](#10-wallet-guthaben-abfragen-wallet_balance)
+
+---
+
+## 1. Globale öffentliche Informationen
+
+Alle von der Plattform zurückgegebenen JSON-Antwortdaten folgen dieser öffentlichen Struktur:
+
+| Feldname | Typ | Beispiel | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `code` | integer | `1` | Globaler Statuscode. `1` steht für Erfolg, `0` oder `-1` steht für Fehler. |
+| `msg` | string | `ok` | Zurückgegebene Textbeschreibung |
+| `data` | object | `{"OpenId":"PT00001"}` | Spezifischer zurückgegebener Dateninhalt, der je nach API variiert |
+| `timestamp` | string | `"1725439986754"` | UTC-Zeitstempel (Millisekunden) |
+| `sign` | string | `9e0ccfe3915e...` | Signatur, die von der Plattform mit ihrem privaten RSA-Schlüssel für die Antwortdaten generiert wurde |
+
+---
+
+## 2. Neuen Benutzer erstellen (create_user)
+
+### API-Beschreibung
+Erstellt einen neuen Plattform-Benutzer. Erfordert die eindeutige Benutzer-ID (UserOpenId).
 
 ### HTTP-Anfrage
-- Schnittstellenname: create_user
-- URL: https://sandbox-api.privatex.io/sdk/user/create
-- Methode: POST
+* **URL:** `https://sandbox-api.privatex.io/sdk/user/create`
+* **Methode:** `POST`
 
 ### Anfrageparameter
-| Parametername | Erforderlich | Typ    | Beschreibung                                                                                       |
-| ------------- | ------------ | ------ | -------------------------------------------------------------------------------------------------- |
-| OpenId        | Ja           | string | Empfohlen, den Plattform-Standardpräfix + eindeutige Benutzer-ID zu verwenden, um OpenId zu bilden |
+| Parametername | Erforderlich | Typ | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `OpenId` | Ja | string | Es wird empfohlen, das Standardpräfix der Plattform + die eindeutige ID des Benutzers zu verwenden, um die OpenId zu bilden. |
 
-### Rückgabeparameter
-| Parametername | Typ    | Beschreibung               |
-| ------------- | ------ | -------------------------- |
-| code          | int    | Globaler Statuscode        |
-| msg           | string | Statusbeschreibung         |
-| data.OpenId   | string | Eindeutige Benutzer-OpenId |
-| sign          | string | Plattformsignatur          |
+### Antwortparameter
+*(Enthält globale Informationen)*
+| Parametername | Typ | Beschreibung |
+| :--- | :--- | :--- |
+| `data.OpenId` | string | Eindeutige OpenId des Benutzers |
 
-### Beispiel
-Anfragebeispiel:
+### Codebeispiel (cURL)
 ```bash
 curl --location 'https://sandbox-api.privatex.io/sdk/user/create' \
 --header 'key: vratson2i5hjxgkd' \
@@ -38,47 +63,32 @@ curl --location 'https://sandbox-api.privatex.io/sdk/user/create' \
   "OpenId":"PT00001"
 }'
 ```
-Rückgabebeispiel:
-```json
-{
-    "code": 1,
-    "msg": "ok",
-    "data": {
-        "OpenId": "PT00001"
-    },
-    "sign": "..."
-}
-```
 
-Für Authentifizierung & Sicherheit siehe [🧩 authentication.md](./authentication.md)
+---
 
-## Wallet erstellen (create_wallet) 💰
+## 3. Wallet erstellen (create_wallet)
 
-### Konzept
-Erstellen Sie ein Wallet-Konto für den Benutzer im entsprechenden Blockchain-Netzwerk.
+### API-Beschreibung
+Erstellt ein Wallet-Konto für den Benutzer im angegebenen Blockchain-Netzwerk.
 
 ### HTTP-Anfrage
-- Schnittstellenname: create_wallet
-- URL: https://sandbox-api.privatex.io/sdk/wallet/create
-- Methode: POST
+* **URL:** `https://sandbox-api.privatex.io/sdk/wallet/create`
+* **Methode:** `POST`
 
 ### Anfrageparameter
-| Parametername | Erforderlich | Typ    | Beschreibung               |
-| ------------- | ------------ | ------ | -------------------------- |
-| ChainID       | Ja           | string | Chain-ID                   |
-| OpenId        | Ja           | string | Eindeutige Benutzer-OpenId |
+| Parametername | Erforderlich | Typ | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `ChainID` | Ja | string | Chain ID (Siehe Anhang) |
+| `OpenId` | Ja | string | Eindeutige OpenId des Benutzers |
 
-### Rückgabeparameter
-| Parametername | Typ    | Beschreibung               |
-| ------------- | ------ | -------------------------- |
-| code          | int    | Globaler Statuscode        |
-| msg           | string | Statusbeschreibung         |
-| data.address  | string | Wallet-Adresse             |
-| data.OpenId   | string | Eindeutige Benutzer-OpenId |
-| sign          | string | Plattformsignatur          |
+### Antwortparameter
+*(Enthält globale Informationen)*
+| Parametername | Typ | Beschreibung |
+| :--- | :--- | :--- |
+| `data.address` | string | Wallet-Adresse |
+| `data.OpenId` | string | Eindeutige OpenId des Benutzers |
 
-### Beispiel
-Anfragebeispiel:
+### Codebeispiel (cURL)
 ```bash
 curl --location 'https://sandbox-api.privatex.io/sdk/wallet/create' \
 --header 'key: vratson2i5hjxgkd' \
@@ -91,45 +101,31 @@ curl --location 'https://sandbox-api.privatex.io/sdk/wallet/create' \
   "ChainID":"1"
 }'
 ```
-Rückgabebeispiel:
-```json
-{
-    "code": 1,
-    "msg": "ok",
-    "data": {
-        "address": "...",
-        "OpenId": "PT00001"
-    },
-    "sign": "..."
-}
-```
 
-## Einzahlungsadresse abrufen (get_wallet_addresses)💳
+---
 
-### Konzept
-Rufen Sie die Blockchain-Wallet-Einzahlungsadresse des Benutzers ab.
+## 4. Einzahlungsadressen abrufen (get_wallet_addresses)
+
+### API-Beschreibung
+Ruft die Blockchain-Wallet-Einzahlungsadressen für einen Benutzer ab (unterstützt Batch-Abfragen über mehrere Chains).
 
 ### HTTP-Anfrage
-- Schnittstellenname: get_wallet_addresses
-- URL: https://sandbox-api.privatex.io/sdk/wallet/getWalletAddresses
-- Methode: POST
+* **URL:** `https://sandbox-api.privatex.io/sdk/wallet/getWalletAddresses`
+* **Methode:** `POST`
 
 ### Anfrageparameter
-| Parametername | Erforderlich | Typ    | Beschreibung                             |
-| ------------- | ------------ | ------ | ---------------------------------------- |
-| OpenId        | Ja           | string | Eindeutige Benutzer-OpenId               |
-| ChainIDs      | Ja           | string | Mehrere Chain-IDs, durch Kommas getrennt |
+| Parametername | Erforderlich | Typ | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `OpenId` | Ja | string | Eindeutige OpenId des Benutzers |
+| `ChainIDs` | Ja | string | Mehrere Chain-IDs, getrennt durch Kommas |
 
-### Rückgabeparameter
-| Parametername  | Typ    | Beschreibung        |
-| -------------- | ------ | ------------------- |
-| code           | int    | Globaler Statuscode |
-| msg            | string | Statusbeschreibung  |
-| data.Addresses | array  | Adressenliste       |
-| sign           | string | Plattformsignatur   |
+### Antwortparameter
+*(Enthält globale Informationen)*
+| Parametername | Typ | Beschreibung |
+| :--- | :--- | :--- |
+| `data.Addresses` | array | Liste von Adressobjekten |
 
-### Beispiel
-Anfragebeispiel:
+### Codebeispiel (cURL)
 ```bash
 curl --location 'https://sandbox-api.privatex.io/sdk/wallet/getWalletAddresses' \
 --header 'key: vratson2i5hjxgkd' \
@@ -142,68 +138,46 @@ curl --location 'https://sandbox-api.privatex.io/sdk/wallet/getWalletAddresses' 
   "ChainIDs":"56,2"
 }'
 ```
-Rückgabebeispiel:
-```json
-{
-    "code": 1,
-    "msg": "ok",
-    "data": {
-        "Addresses": [
-            {
-                "chainID": 56,
-                "address": "..."
-            }
-        ]
-    },
-    "sign": "..."
-}
-```
 
-## Benutzer-Auszahlung (user_withdraw_by_open_id)💸
+---
 
-### Konzept
-Benutzer-Auszahlungsoperation, Überweisung vom Partnerkonto zur benutzerspezifizierten Adresse.
+## 5. Benutzerauszahlung (user_withdraw_by_open_id)
 
-* Funktion: Benutzer-Auszahlungsoperationsschnittstelle. Auszahlungen müssen vom Partnerkonto im entsprechenden Token-Auszahlungspool zum benutzerspezifizierten Auszahlungs-Wallet-Adresse überwiesen werden. Partner können eine sichere Callback-Adresse einrichten, um die Legitimität der Auszahlung zu überprüfen. Wenn als gültig überprüft, kann die Auszahlung direkt aus dem Wallet des Händler-Fonds-Pools abgeschlossen werden.
+### API-Beschreibung
+Initiiert einen Auszahlungsvorgang, bei dem Gelder aus dem Fonds des Partners auf die vom Benutzer angegebene Adresse übertragen werden.
 
-* Die Auszahlungstransaktionsschnittstelle überprüft, ob das Standard-Auszahlungs-Hot-Wallet ausreichend Auszahlungsvermögen und Gebühren hat.
+> **⚠️ Warnung:**
+> * Sobald eine Transaktion im Blockchain-Netzwerk initiiert wurde, **kann sie nicht mehr rückgängig gemacht oder erstattet werden**. Bitte stellen Sie sicher, dass vor dem Aufruf dieser API ordnungsgemäße Risikokontrollen durchgeführt werden.
+> * Sie müssen sicherstellen, dass der Auszahlungspool über ein ausreichendes Guthaben des Tokens und für die Gas-Gebühren (wie ETH/TRX) verfügt.
 
-* Standardmäßig verwendet die Auszahlungsschnittstelle einen Sicherheitsüberprüfungscode als eindeutigen Parameteranforderung für Auszahlungstransaktionen. Es wird generell empfohlen, die eindeutige Auszahlungsauftragsnummer der Geschäftsplattform als Sicherheitskode zu verwenden. Das Einreichen eines doppelten Sicherheitsüberprüfungscodes führt zu einem Fehler.
-
-* Alle Auszahlungstransaktionsanfragen werden mit den auf der Kanalplattform konfigurierten Risikokontrollprüfungsregeln abgeglichen. Wenn die Parameteranfrage gültig ist, wird die Transaktionsanfrage akzeptiert. Auszahlungstransaktionen, die den automatischen Prüfungsregeln entsprechen, werden sofort an die Netzwerktransaktion übermittelt und die Hash-Informationen der übermittelten Transaktion werden zurückgegeben (Rückgabefeld data). Auszahlungstransaktionsanfragen, die eine sekundäre Prüfung auf dem Kanal erfordern, geben (code=2) zurück. Die Auszahlungsanfrage muss nicht erneut eingereicht werden. Der Administrator muss die sekundäre Prüfung auf der Kanalplattform abschließen. Nach Abschluss der sekundären Prüfung wird der Transaktionsauftrag callback-benachrichtigt, um den Status der Auszahlungstransaktion zu ändern.
-
-* Voraussetzung: Der Fonds-Pool der entsprechenden Währung muss ausreichend Mittel für die Auszahlung haben (insbesondere für Token-Auszahlungen im ETH-Netzwerk, die ein bestimmtes ETH-Transaktionsgebühren-Guthaben im Fonds-Pool-Wallet erfordern).
-
-* ⚠️ Hinweis: **Für Blockchain-Auszahlungen stellen Sie bitte sicher, dass der Vorabgenehmigungsprozess abgeschlossen ist, bevor Sie die Schnittstelle aufrufen. Sobald eine Blockchain-Transaktion initiiert wird, kann sie nicht widerrufen oder zurückgegeben werden.**
+### Geschäftslogik
+1. Eine eindeutige Bestellnummer von der Geschäftsplattform wird normalerweise als `SafeCheckCode` verwendet, um doppelte Auszahlungen zu verhindern.
+2. Die Transaktion wird mit den Risikokontrollregeln der Plattform abgeglichen:
+   * **Automatisch genehmigt:** Sie wird direkt in die Chain aufgenommen und `data` gibt den Transaktions-Hash zurück.
+   * **Zweitprüfung (`code=2`):** Erfordert eine manuelle Überprüfung durch einen Administrator auf der Channel-Plattform. Nach der Überprüfung wird der Status asynchron über einen Webhook mitgeteilt.
 
 ### HTTP-Anfrage
-- Schnittstellenname: user_withdraw_by_open_id
-- URL: https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenID
-- Methode: POST
+* **URL:** `https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenID`
+* **Methode:** `POST`
 
 ### Anfrageparameter
-| Parametername | Erforderlich | Typ    | Beschreibung                |
-| ------------- | ------------ | ------ | --------------------------- |
-| OpenId        | Ja           | string | Eindeutige Benutzer-OpenId  |
-| TokenId       | Ja           | string | Token-ID                    |
-| Amount        | Ja           | float  | Auszahlungsbetrag           |
-| AddressTo     | Ja           | string | Zieladresse                 |
-| CallBackUrl   | Nein         | string | Callback-URL                |
-| SafeCheckCode | Nein         | string | Sicherheitsüberprüfungscode |
+| Parametername | Erforderlich | Typ | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `OpenId` | Ja | string | Eindeutige OpenId des Benutzers |
+| `TokenId` | Ja | string | Token-ID (Siehe Anhang) |
+| `Amount` | Ja | float | Auszahlungsbetrag |
+| `AddressTo` | Ja | string | Zieladresse für die Auszahlung |
+| `CallBackUrl` | Nein | string | URL für Statusänderungs-Callback |
+| `SafeCheckCode` | Nein | string | Sicherheitsverifizierungscode (Bestell-ID des Geschäfts) |
 
-### Rückgabeparameter
+### Beschreibung der Antwort-Statuscodes
+| `code` | Beschreibung |
+| :--- | :--- |
+| `1` | Transaktion erfolgreich und on-chain übermittelt, `data` gibt den Hash zurück. |
+| `2` | Transaktion übermittelt, hat jedoch die Risikokontrolle der Plattform ausgelöst, erfordert eine Zweitprüfung. |
+| `0` oder `-1` | Parameterfehler, unzureichendes Guthaben oder fehlgeschlagene Transaktion. Überprüfen Sie `msg` auf Details. |
 
-| Parametername | Typ    | Beschreibung                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| :------------ | :----- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| code          | int    | Statuscode</br>0 Parameterfehler, doppelte Auftragsnummer, falsches Auszahlungsadressenformat oder unzureichende Auszahlungs-Wallet-Gebühren. Detaillierte Informationen finden Sie in msg.</br>1 Die Auszahlungstransaktion wurde erfolgreich übermittelt und an das Blockchain-Netzwerk übermittelt. Der eindeutige Hash der übermittelten Transaktion ist in data enthalten.</br>2 Die Auszahlungstransaktion wurde erfolgreich übermittelt und erfordert eine sekundäre Kanalprüfung, bevor die Transaktion abgeschlossen werden kann. Nach Abschluss der Prüfung werden die Transaktionsinformationen durch einen Callback aktualisiert.</br>-1 Die Auszahlungstransaktion ist fehlgeschlagen. Sie können die Auszahlungsanfrage erneut einreichen. |
-| msg           | string | Statusbeschreibung                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| data          | string | Transaktionshash. Wenn intelligente Auszahlung aktiviert ist, wird dieses Feld als leere Zeichenkette zurückgegeben.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| sign          | string | Plattformsignatur                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| timestamp     | string | Aktueller Zeitstempel in Millisekunden, umgewandelt in eine Zeichenkette                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-
-
-### Beispiel
-Anfragebeispiel:
+### Codebeispiel (cURL)
 ```bash
 curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenID' \
 --header 'key: vratson2i5hjxgkd' \
@@ -221,71 +195,200 @@ curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenI
 }'
 ```
 
-Rückgabebeispiel
+---
+
+## 6. Zweitprüfung für Auszahlungsaufträge (Webhook)
+
+### Callback-Beschreibung
+Wenn ein Administrator im Händler-Backend eine "Risikokontroll-Callback-URL" konfiguriert, initiiert die Plattform bei der Verarbeitung einer Auszahlungstransaktion aktiv eine HTTP-Anfrage an diese URL, um die Geschäftsseite des Händlers zu fragen, ob die Auszahlung freigegeben werden soll.
+**Die Plattform gibt die Gelder nur frei, wenn die Händler-API `code=0` zurückgibt.**
+
+> **⚠️ Hinweis:** Die Plattform weist dem Händler einen unabhängigen **öffentlichen RSA-Schlüssel für die Risikokontrolle (`PlatformRiskPubKey`)** zu. Der Händler muss diesen öffentlichen Schlüssel verwenden, um die Authentizität der Signatur für diesen Callback zu überprüfen.
+
+### Von der Plattform initiierte HTTP-Anfrage
+* **Methode:** `POST`
+* **URL:** Konfigurierte Webhook-URL des Händlers `/withdrawal/order/check`
+
+### Callback-Parameter
+| Parametername | Erforderlich | Typ | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `safeCode` | Nein | string | Die vom Händler übermittelte Bestell-ID für die Auszahlung (`SafeCheckCode`) |
+| `openId` | Ja | string | ID des auszahlenden Benutzers |
+| `tokenId` | Ja | string | Token-ID |
+| `toAddress` | Ja | string | Zieladresse der Auszahlung |
+| `amount` | Ja | string | Auszahlungsbetrag |
+| `timestamp` | Ja | int | Millisekunden-Zeitstempel |
+| `sign` | Ja | string | Signatur, die von der Plattform mit ihrem privaten Risikokontrollschlüssel generiert wurde |
+
+### Erwartete Antwort vom Händler
+Nach der Verarbeitung muss die Händler-API folgendes JSON zurückgeben:
+
+| Parametername | Typ | Beschreibung |
+| :--- | :--- | :--- |
+| `code` | int | Überprüfungsergebnis. `0` bedeutet Zustimmung zur Freigabe; andere Zahlen bedeuten Ablehnung. |
+| `timestamp` | int | Aktueller Zeitstempel in Sekunden |
+| `message` | string | Benutzerdefinierte Beschreibung |
+| `sign` | string | Der Händler signiert die Antwortdaten mit seinem eigenen privaten RSA-Schlüssel |
+
+---
+
+## 7. Ein- und Auszahlungs-Rückrufbenachrichtigung (Webhook)
+
+### Callback-Beschreibung
+Die Plattform pusht asynchrone Benachrichtigungen über den Token-Transaktionsstatus (Erfolg/Fehlschlag der Auszahlung oder Benutzereinzahlung) an die Geschäftsseite.
+
+1. **Wiederholungsmechanismus:** Die Geschäftsseite muss mit dem Rückgabecode `0` antworten, damit die Benachrichtigung als erfolgreich empfangen gilt. Andernfalls wiederholt die Plattform den Push-Vorgang kontinuierlich gemäß der Strategie (anfangs 50 Mal alle 2 Sekunden, dann einmal alle 10 Minuten).
+2. **Statusüberschreibung:** Eine Transaktion kann mehrere Benachrichtigungen auslösen. Bitte verlassen Sie sich auf den neuesten Status.
+3. **Fehlerbehandlung:** Wenn der Auszahlungs-Callback `status = -1` lautet, pusht das System erneut eine neue Statusbenachrichtigung, nachdem der Administrator die Transaktion im Backend erneut übermittelt hat.
+
+### Von der Plattform initiierte HTTP-Anfrage
+* **Methode:** `POST`
+* **URL:** Die vom Händler dem Dienstanbieter zur Verfügung gestellte Callback-URL.
+
+### Callback-Parameter
+| Parametername | Erforderlich | Typ | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `type` | Ja | int | Geschäftstyp: `1` für Einzahlung; `2` für Auszahlung. |
+| `status` | Ja | int | Transaktionsstatus:<br/> `1`: On-chain erfolgreich, kann über den Hash abgefragt werden.<br/> `-1`: On-chain fehlgeschlagen, kann im Backend verarbeitet werden.<br/> `2`: Risikokontrolle ausgelöst, erfordert manuelle Überprüfung im Admin-Backend.<br/> `-2`: Auszahlungsantrag durch die Risikokontroll-API des Händlers abgelehnt. |
+| `openid` | Ja | string | Eindeutige ID des Channel-Benutzers |
+| `totalvalue` | Ja | string | Äquivalenter USDT-Wert, berechnet auf Basis des Marktpreises zum Zeitpunkt der Transaktion |
+| `hash` | Ja | string | On-chain Transaktions-Hash |
+| `confirm` | Ja | int | On-chain Bestätigungsanzahl |
+| `from` | Ja | string | Adresse des Transaktionsinitiators |
+| `to` | Ja | string | Empfangsadresse der Transaktion |
+| `amount` | Ja | string | Transaktionsbetrag |
+| `chainid` | Ja | string | Chain-ID |
+| `tokenid` | Ja | string | Token-ID |
+| `tokenaddress` | Ja | string | Smart-Contract-Adresse |
+| `safecode` | Nein | string | Sicherheitsverifizierungscode für Auszahlungsauftrag (OrderID) |
+| `createdtime` | Ja | string | Erstellungszeit der Transaktion |
+| `timestamp` | Ja | string | Push-Zeitstempel |
+
+### Erwartete Antwort vom Händler
+Wenn erfolgreich empfangen, geben Sie bitte einen JSON-Antwortkörper zurück, der `{"code": 0}` enthält.
+
+---
+
+## 8. Kassenbestellung erstellen (new_order)
+
+### API-Beschreibung
+Diese Schnittstelle wird von Händlern verwendet, um Zahlungs- oder Aufladeanfragen zu initiieren. Das System gibt eine Zahlungsadresse (Cashier-URL) zurück, die der Benutzer besuchen kann, um den nachfolgenden Zahlungsvorgang abzuschließen.
+
+### HTTP-Anfrage
+* **URL:** `https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder`
+* **Methode:** `POST`
+
+### Anfrageparameter
+| Parametername | Erforderlich | Typ | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `outOrderNo` | Ja | string | Eindeutige Bestellnummer auf der Händlerseite (zur Vermeidung von Doppelübermittlungen und zum Abgleich) |
+| `tokenId` | Ja | integer | Token-ID |
+| `quantity` | Ja | decimal | Bestellbetrag/-menge |
+| `notifyUrl` | Nein | string | Asynchrone Callback-Benachrichtigungsadresse nach erfolgreicher Zahlung |
+
+### Antwortparameter
+*(Enthält globale Informationen)*
+| Parametername | Typ | Beschreibung |
+| :--- | :--- | :--- |
+| `data.orderNo` | string | Vom System generierte eindeutige Bestell-ID |
+| `data.outOrderNo` | string | Vom Händler übermittelte ursprüngliche Bestell-ID |
+| `data.cashierUrl` | string | **Kernfeld**: Adresse der Kassenseite. Händler müssen Benutzer zu diesem Link leiten, um die Zahlung vorzunehmen. |
+
+### Codebeispiel (cURL)
+```bash
+curl --location 'https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder' \
+--header 'key: your_api_key' \
+--header 'sign: your_md5_sign' \
+--header 'clientSign: your_rsa_sign' \
+--header 'Content-Type: application/json' \
+--header 'timestamp: 1770606706659' \
+--data '{  
+  "outOrderNo": "1234623",   
+  "tokenId": 6,   
+  "quantity": 0.01,   
+  "notifyUrl": "https://your-domain.com/callback"   
+}'
+```
+
+---
+
+## 9. Kassenbestellung Zahlungsbestätigung Callback (Webhook)
+
+### Callback-Beschreibung
+Nachdem der Benutzer die Zahlung auf der Kassenseite abgeschlossen hat, sendet DogPay eine asynchrone Callback-Benachrichtigung an die vom Händler angegebene `notifyUrl`.
+
+### Von der Plattform initiierte HTTP-Anfrage
+* **Methode:** `POST`
+* **URL:** Vom Händler bereitgestellte `notifyUrl`
+
+### Callback-Parameter
+| Parametername | Typ | Beschreibung |
+| :--- | :--- | :--- |
+| `orderId` | string | Plattform-Systembestellnummer |
+| `outOrderId` | string | Ursprüngliche Händlerbestellnummer |
+| `orderStatus` | string | **Bestellstatus**: 2 bedeutet normalerweise erfolgreiche Zahlung |
+| `tokenId` | string | Token-ID |
+| `quantityPaid` | string | **Tatsächlich vom Benutzer bezahlte Menge** |
+| `sign` | string | **Datensignatur** (wird zur Händlerüberprüfung verwendet, um gefälschte Callbacks zu verhindern) |
+
+### Erwartete Antwort vom Händler
+Geben Sie bei erfolgreichem Empfang das folgende JSON zurück:
 ```json
 {
-    "sign": "D+VTPNiwGLzh9eIvkrscwS4UlGKzdnrBgB63RDG4HeobZT6FXqUwYCPgKojynKaxwm5PkmW0xhIASZ4asSCvnYfi0NSFehchZAtUnQIispxKcjsiudWsUznbkEIQ2h2TA/mbUZ1X9+wyh7QhNo6+RkxtgRyRpVb7ARG8pL14cdTAs OTtMLO0W1GO0M83VAv2ybBZNObncX9qy6tdwLQV/KYuNJYyMN0dL0nLKYHnj9Q4d3lEDM45AVJ0153/YIiIgcF BnOWhsQ9rVARcFeXeWd9KJ5OZpmxlxnhcJGcEUY2UDC4zKLZxtUet7CPAyehAMQ5plkpvRrR3Z6lA5zl6GQ==",
-    "timestamp": "1725439986754",
-    "data": "94f4c29eba73d53dcd3aa1b8cf90a98108d0acf82f38b97a4032dcdf7ff172e7",
-    "msg": "ok",
-    "code": 1
+  "code": "1",
+  "message": "success"
 }
 ```
 
-## Sekundäre Prüfung des Auszahlungsauftrags 💳
+---
 
-* Funktion: Sekundäre Risikokontrollprüfungsschnittstelle für Händler-Auszahlungsaufträge
-* ⚠️ Hinweis: **Die Plattform weist Händlern einen separaten Risikokontroll-RSA-öffentlichen Schlüssel zu (anders als der Ein-/Auszahlungs-Callback-Benachrichtigungs-öffentliche Schlüssel)**
-* Auslösungszeit: Nachdem der Administrator die Risikokontroll-Callback-URL-Parameter auf der Händlerseite konfiguriert hat (Systemeinstellungen), fügt der Kanal für jede Auszahlungstransaktionsanfrage eine zusätzliche Risikokontroll-Callback-sekundäre Prüfung hinzu. Nur wenn die Risikokontroll-URL auf der Händlerseite einen korrekten Überprüfungspass-Code zurückgibt, ist die Transaktion gültig übermittelt.
-* Technische Anforderungen: Technische Implementierung und Konfiguration der sekundären Prüfungs-Callback-Schnittstelle auf der Händlerseite sind erforderlich.
+## 10. Wallet-Guthaben abfragen (wallet_balance)
 
-#### HTTP-Anfrage
+### API-Beschreibung
+Fragt das Token- oder Coin-Guthaben für eine angegebene Wallet-Adresse in einem bestimmten Blockchain-Netzwerk ab.
 
-Die Plattform sendet eine Auszahlungsprüfungsanfrage an den Händler
-
-> POST: `/withdrawal/order/check`
-
-#### Anfrageparameter
-
-| Parametername | Erforderlich | Typ    | Beschreibung                                                                                                                                                                  |
-| :------------ | :----------- | :----- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| safeCode      | Nein         | string | Eindeutige Transaktions-ID, die vom Händler eingereicht wurde, entspricht im Allgemeinen der Auszahlungsauftrags-ID des Händlers (SafeCheckCode für Auszahlungstransaktionen) |
-| openId        | Ja           | string | Benutzer-ID des Händlers, der die Auszahlungstransaktion einreicht                                                                                                            |
-| tokenId       | Ja           | string | Währungs-ID, basierend auf der von der Plattform bereitgestellten Währungs-ID                                                                                                 |
-| toAddress     | Ja           | string | Auszahlungsadresse                                                                                                                                                            |
-| amount        | Ja           | string | Auszahlungsbetrag                                                                                                                                                             |
-| timestamp     | Ja           | int    | Aktueller Zeitstempel                                                                                                                                                         |
-| sign          | Ja           | string | Signatur: Nur die Parameter im Data-Feld werden signiert; die Korrektheit der Signatur muss mit dem Risikokontroll-RSA-öffentlichen Schlüssel der Plattform überprüft werden. |
-
-#### Rückgabeparameterbeschreibung
-
-| Parametername | Typ    | Beschreibung                                                                                   |
-| :------------ | :----- | :--------------------------------------------------------------------------------------------- |
-| code          | int    | Überprüfungsergebnis. 0 bedeutet bestanden; andere Codes sind ungültig.                        |
-| timestamp     | int    | Aktueller Zeitstempel, in Sekunden.                                                            |
-| message       | string | Rückgabemeldung.                                                                               |
-| sign          | string | Signatur: Die RSA-Privatschlüssel-Signatur des Händlers für das Data-Feld im Antwortparameter. |
-
-## Ein- und Auszahlungs-Callback-Benachrichtigungen
-
-1. Ein- und Auszahlungstransaktionen lösen mehrere Callback-Benachrichtigungen aus. Die Transaktionsinformationen und der Status der letzten Callback-Benachrichtigung werden verwendet.
-2. Die Geschäftseite muss eine gültige Callback-Nachricht zurückgeben. Das Format ist in der Rückgabeparameterbeschreibung beschrieben. Ein Rückgabecode von 0 bedeutet, dass die Callback-Nachricht verarbeitet wurde und keine weiteren Benachrichtigungen erforderlich sind. Andernfalls wird der Callback fortgesetzt (zunächst alle 2 Sekunden für 50 Mal, und dann alle 10 Minuten danach), bis eine Bestätigungsnachricht mit Code 0 zurückgegeben wird.
-
-Kontaktieren Sie den Dienstleister, um die Callback-URL einzustellen.
-
-> POST
-
-* Funktion: Definiert das Callback-Nachrichtenformat, das die Plattform verwendet, um die Anwendungsseite über Token-Transaktionsinformationen (Benutzer-Auszahlung oder Einzahlung) zu benachrichtigen. Diese Nachricht eignet sich für Anwendungsseitige Ereignisbenachrichtigungen bezüglich des Token-Transaktionsstatus (Auszahlung oder Einzahlung). Anwendungen können die Callback-Benachrichtigungsschnittstelle optional basierend auf ihrer Anwendungsfunktionalität unterstützen.
+### HTTP-Anfrage
+* **URL:** `https://sandbox-api.privatex.io/sdk/wallet/balance`
+* **Methode:** `POST`
 
 ### Anfrageparameter
+| Parametername | Erforderlich | Typ | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| `address` | Ja | string | Wallet-Adresse |
+| `contractAddress` | Ja | string | Token-Vertragsadresse oder Token-Symbol (z. B. `"XRP"`, `"USDT"`) |
+| `chainId` | Ja | integer | Chain-ID (z. B. `5` für XRP, `1` für Ethereum, `56` für BNB Chain) |
 
-| Parametername | Erforderlich | Typ    | Beschreibung                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| :------------ | :----------- | :----- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| openid        | ja           | string | Eindeutige Kanalbenutzer-ID                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| totalvalue    | ja           | string | USDT-Wert, der der Ein- oder Auszahlungstransaktion entspricht (basierend auf dem Marktpreis zum Zeitpunkt der Transaktion berechnet)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| status        | ja           | int    | Transaktionsstatus:</br>1 Die Transaktion ist abgeschlossen und wurde erfolgreich an das Blockchain-Netzwerk übermittelt. Transaktionsdetails können on-chain mit dem Hash abgefragt werden.</br>-1 Die Transaktion wurde an das Blockchain-Netzwerk übermittelt, aber die on-chain-Transaktion ist fehlgeschlagen. Sie können sie in Merchant Management --> Transaction Management --> [Submit Order Security Code] erneut prüfen. Die Geschäftsplattform muss den Statuswechsel nicht verarbeiten und kann einfach auf den Kanal warten, um die neue Statusbenachrichtigung callback zu rufen.</br>-2 Die Auszahlungstransaktionsanfrage wurde vom Händler-Backend abgelehnt. Die Auszahlungsanfrage ist abgelaufen. Es wird empfohlen, dass die Geschäftsplattform die Auszahlungsanfrage des Benutzers nach Erhalt der Benachrichtigung zurückgibt.</br>2 Die Auszahlungstransaktion wurde an das Merchant Management übermittelt. Da sie die konfigurierten Währungssicherheitsrisikokontrollanforderungen ausgelöst hat, muss der Administrator sich bei Merchant Management --> Transaction Management --> Withdrawal Review anmelden, um die Auszahlungsanfrage zu bearbeiten.</br>3 Während der Blockchain-Verarbeitung der Auszahlungstransaktion muss die Geschäftsplattform den Statuswechsel nicht aktualisieren und kann einfach auf den Kanal warten, um eine neue Statusbenachrichtigung zu erhalten. </br>⛑️**Spezielle Erinnerung: Für Auszahlungstransaktions-Callbacks, die von der Geschäftsplattform empfangen werden, wenn status = -1, wird der Callback ignoriert. Nachdem der Administrator sich im Management-Backend angemeldet und die Transaktion erneut übermittelt hat, wird gleichzeitig eine neue Statusbenachrichtigung an die Plattform gepusht.** |  | type | ja | int | 1 für Einzahlungstransaktionen; 2 für Auszahlungstransaktionen |
-| hash          | ja           | string | Transaktions-Hash-Wert                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| confirm       | ja           | int    | Anzahl der on-chain-Bestätigungen für die Transaktion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| createdtime   | ja           | string | Erstellungszeit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| from          | ja           | string | Adresse des Transaktionsinitiators                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| to            | ja           | string | Empfangsadresse der Transaktion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+### Antwortparameter
+*(Enthält globale Informationen)*
+| Parametername | Typ | Beschreibung |
+| :--- | :--- | :--- |
+| `code` | integer | Globaler Statuscode (`1` für Erfolg) |
+| `msg` | string | Statusbeschreibung |
+| `data` | string | Token- / Coin-Guthabenbetrag (in kleinsten Einheiten) |
+| `timestamp` | string | Antwortzeitstempel (Millisekunden) |
+| `sign` | string | Plattform-Datensignatur |
+
+### Codebeispiel (cURL)
+```bash
+curl --location --request POST 'https://sandbox-api.privatex.io/sdk/wallet/balance' \
+--header 'key: your_api_key' \
+--header 'sign: your_md5_sign' \
+--header 'Content-Type: application/json' \
+--header 'timestamp: 1725076567682' \
+--data-raw '{
+  "address":"rXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "contractAddress":"XRP",
+  "chainId":5
+}'
+```
+
+### Antwortbeispiel
+```json
+{
+  "sign" : "",
+  "timestamp" : "1725432397796",
+  "data" : "1979984",
+  "msg" : "ok",
+  "code" : 1
+}
+```

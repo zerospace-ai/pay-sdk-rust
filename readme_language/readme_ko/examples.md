@@ -1,81 +1,44 @@
-# 예시 📝
+# 예제 및 도구
 
-이 문서는 CryptoPay Rust SDK의 사용 예시를 제공합니다. 데모 실행, 키 생성 및 콜백 처리 등을 포함합니다.
+이 문서는 두 부분으로 나뉩니다.
+1. **시나리오 기반 코드 예제:** 실제 코드에서 API 호출 및 검증을 처리하는 방법을 보여줍니다.
+2. **CLI 도구 가이드:** 빠른 테스트를 위해 SDK에 포함된 컴파일된 실행 파일을 사용하는 방법을 설명합니다.
 
-## 1 SDK 인스턴스 객체 🛠️
+---
 
-### 1.1 필수 구성 ⚙️
+## 1. 시나리오 기반 코드 예제
 
-1. 비즈니스 이름을 등록하고 `ApiKey`와 `ApiSecret`을 얻습니다;
+### 1.1 완전한 API 호출 및 응답 검증
 
-2. 자신의 `RSA` 키 쌍을 생성합니다;
-
-3. 플랫폼의 `RSA` 공개 키를 준비합니다;
-
-### 1.2 서명 객체 생성 🔏
-
-1. 구성 파일 `config.yaml`을 추가합니다.
-
-```yaml
-# 비즈니스 정보 구성
-ApiKey: ""
-ApiSecret: ""
-# 플랫폼 공개 키
-PlatformPubKey: ""
-# 플랫폼 차단용 공개 키
-PlatformRiskPubKey: ""
-# 자신의 개인 키
-RsaPrivateKey: ""
-```
-
-2. 구성 파일을 로드하고 API 객체를 생성합니다.
+다음 코드는 SDK를 사용하여 "사용자 생성" 요청을 빌드하고 HTTP 요청을 보내고 플랫폼에서 반환된 데이터의 서명 보안을 검증하는 방법을 보여줍니다.
 
 ```rust
+use pay_sdk_rust::{
+    response_define::ResponseCommon,
+    rsa_utils,
+    sdk::{load_config, SDKConfig, Sdk},
+};
+use reqwest::Client;
 
-	let cfg = load_config("./config.yaml")?;
-    
-    let sdk_config = SDKConfig {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. SDK 초기화
+    let cfg = load_config("./config.yaml")?;
+    let sdk = Sdk::new(SDKConfig {
         api_key: cfg.api_key,
         api_secret: cfg.api_secret,
         platform_pub_key: cfg.platform_pub_key,
         platform_risk_pub_key: cfg.platform_risk_pub_key,
         rsa_private_key: cfg.rsa_private_key,
-    };
+    });
 
-```
-
-### 1.3 요청 데이터 생성 및 서명 ✍️
-
-사용자 생성을 예로 들어 보겠습니다.
-
-```rust
-
-	// ....
-	let open_id = "user_002";
-
+    // 2. 요청 매개변수 및 서명 헤더 생성
+    let open_id = "PT00001";
     let (req_body, timestamp, sign, client_sign) = sdk.create_user(open_id)?;
 
-
-```
-
-```rust
-	let map_data: HashMap<String, String> =
-            serde_json::from_value(serde_json::to_value(&req)?)?;
-	let data_str = rsa_utils::compose_params(&map_data);
-	let timestamp = Utc::now().timestamp_millis().to_string();
-	let sign = self.generate_md5_sign(&data_str, &timestamp);
-	let client_sign = self.generate_rsa_signature(&map_data)?;
-	let j_str = serde_json::to_string(&req)?;
-```
-
-### 1.4 요청 채우기 및 시작 🚀
-
-```rust
-	// ....
-	
+    // 3. HTTP 요청 전송
     let client = Client::new();
     let url = "https://sandbox-api.privatex.io/sdk/user/create";
-
     let resp = client.post(url)
         .header("Content-Type", "application/json")
         .header("key", sdk.config.api_key.clone())
@@ -87,71 +50,72 @@ RsaPrivateKey: ""
         .await?;
 
     let body = resp.text().await?;
-    println!("Response: {}", body);
-
-```
-
-### 1.5 반환 데이터 검증 및 파싱 ✅
-
-```rust
-
+    
+    // 4. 응답 서명 자동 검증
     let parsed: ResponseCommon = serde_json::from_str(&body)?;
-    println!("Parsed response: {:?}", parsed);
     if parsed.code != 1 {
-        return Err(anyhow::anyhow!("Error response: {}", parsed.msg));
-    }
-    match rsa_utils::to_string_map(&body) {
-        Ok(map_data) => {
-            match serde_json::from_str::<pay_sdk_rust::response_define::ResponseCreateUser>(&body) {
-                Ok(rsp_data) => {
-                    let sign = rsp_data.sign.clone();
-                    match sdk.verify_rsa_signature(&map_data, &sign) {
-                        Ok(_) => println!("verify signature success!"),
-                        Err(e) => eprintln!("verify signature failed: {:?}", e),
-                    }
-                }
-                Err(e) => eprintln!("parse JSON ResponseCreateUser failed: {:?}", e),
-            }
-        }
-        Err(e) => eprintln!("convert to map[string]string failed: {:?}", e),
+        println!("요청 실패: {}", parsed.msg);
+        return Ok(());
     }
 
+    let map_data = rsa_utils::to_string_map(&body)?;
+    let rsp_data: pay_sdk_rust::response_define::ResponseCreateUser = serde_json::from_str(&body)?;
+    
+    match sdk.verify_rsa_signature(&map_data, &rsp_data.sign) {
+        Ok(_) => println!("✅ 요청 성공 및 검증 완료! 반환된 OpenId: {}", rsp_data.data.open_id),
+        Err(e) => println!("❌ 서명 검증 실패: {:?}", e),
+    }
+
+    Ok(())
+}
 ```
 
-## 2. 실행 가능한 인터페이스 명령 생성
 
-* 1. SDK 루트 디렉토리에서 `cargo build --example create_user_client` 명령을 실행하여 `pay-sdk-rust/target/debug/examples/` 디렉토리에 각 기능 명령의 바이너리 실행 파일을 생성합니다.
+---
 
-* 2. ".exe" 접미사가 있는 파일은 64비트 Windows 머신에서 실행됩니다; 접미사가 없는 파일은 Linux/Mac에서 실행됩니다. 예: create_user.exe 및 create_user 실행 파일.
+## 2. CLI 도구 사용 가이드
 
-* 3. 구성된 config.yaml 파일을 `pay-sdk-rust/target/debug/examples/` 디렉토리로 복사합니다.
+SDK는 각 API 엔드포인트를 빠르게 테스트하기 위한 CLI(명령줄 인터페이스) 바이너리 파일을 제공합니다.
 
-## 3. 명령 호출 📞
+### 2.1 실행 파일 컴파일
 
-### 3.1. 새 사용자 등록 🆕
+SDK 루트 디렉터리에서 `cargo build --examples` 명령을 실행하면 시스템이 `target/debug/examples/` 디렉터리에 각 기능에 대한 바이너리 실행 파일을 생성합니다.
+* **Windows:** `.exe`로 끝나는 파일을 생성합니다(예: `create_user.exe`).
+* **Mac/Linux:** 확장자 없는 파일을 생성합니다(예: `create_user`).
 
+### 2.2 구성 파일 준비
 
-SDK의 `pay-sdk-rust/target/debug/examples/` 디렉토리로 이동하여 그곳의 config.yaml 파일에서 UserOpenId 필드를 수정합니다.
+도구를 실행하기 전에 구성된 `config.yaml` 파일이 실행 디렉터리(일반적으로 프로젝트 루트 또는 `target/debug/examples/`)에 있는지 확인하십시오.
 
-create_user 또는 create_user.exe 실행 파일을 실행하여 플랫폼에 새 사용자를 등록합니다.
+### 2.3 엔드포인트 명령 테스트
 
-이미 등록된 새 UserOpenId를 등록하려고 하면 오류가 반환됩니다.
+#### 새 사용자 등록
+1. `config.yaml`의 `UserOpenId` 필드를 수정합니다.
+2. `cargo run --example create_user_client`를 실행합니다.
+3. OpenId가 이미 등록된 경우 도구에서 오류를 반환합니다.
 
+#### 지갑 등록
+1. `config.yaml`에 `UserOpenId` 및 `ChainID`를 지정합니다.
+2. `cargo run --example create_wallet`을 실행합니다.
 
-### 3.2. 지갑 등록 💼
+#### 입금 주소 가져오기
+1. `config.yaml`에 `UserOpenId`와 조회할 `ChainIDs`(예: "1,56")를 지정합니다.
+2. `cargo run --example get_wallet_addresses`를 실행합니다.
 
-SDK의 `pay-sdk-rust/target/debug/examples/` 디렉토리로 이동하여 `config.yaml` 파일에서 `UserOpenId` 및 `ChainID` 필드를 지정합니다.
+#### 출금 신청
+1. `config.yaml`에 다음을 지정합니다.
+   * `UserOpenId`
+   * `TokenId`
+   * `Amount`
+   * `AddressTo`
+   * `SafeCheckCode` (고유한 주문 중복 방지 코드)
+   * `CallbackUrl`
+2. `cargo run --example user_withdraw_by_open_id`를 실행합니다.
 
-`create_wallet` 또는 `create_wallet.exe` 실행 파일을 실행하여 플랫폼에서 사용자 지갑 등록을 완료합니다.
+#### 카셔 주문 생성
+1. `config.yaml`에서 `OutOrderNo`, `TokenId`, `Quantity`, `NotifyUrl`을 지정합니다.
+2. `cargo run --example new_order`를 실행합니다.
 
-### 3.3. 입금 주소 가져오기 📍
-
-SDK의 `pay-sdk-rust/target/debug/examples/` 디렉토리로 이동하여 `config.yaml`에서 `UserOpenId` 및 `ChainIDs` 필드를 지정합니다.
-
-`get_wallet_addresses` 또는 `get_wallet_addresses.exe` 실행 파일을 실행합니다.
-
-### 3.4. 출금 💸
-
-SDK의 `pay-sdk-rust/target/debug/examples/` 디렉토리로 이동하여 `config.yaml`에서 `UserOpenId`, `TokenId`, `Amount`, `AddressTo`, `SafeCheckCode` 및 `CallbackUrl` 필드를 지정합니다.
-
-`user_withdraw_by_open_id` 또는 `user_withdraw_by_open_id.exe` 실행 파일을 실행합니다.
+#### 지갑 잔액 조회
+1. `config.yaml`에서 `WalletAddress`, `ContractAddress`, `WalletBalanceChainId`를 지정합니다.
+2. `cargo run --example wallet_balance`를 실행합니다.

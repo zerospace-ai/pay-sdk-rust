@@ -1,81 +1,44 @@
-# 例 📝
+# 例とツール
 
-このドキュメントは、CryptoPay Rust SDKの使用例を提供します。Demoの実行、キーの生成、およびコールバックの処理を含みます。
+このドキュメントは 2 つの部分に分かれています。
+1. **シナリオベースのコード例:** 実際のコードで API 呼び出しと検証を処理する方法を示します。
+2. **CLI ツールガイド:** クイックテストのために SDK に含まれているコンパイル済み実行可能ファイルの使用方法について説明します。
 
-## 1 SDKインスタンスオブジェクト 🛠️
+---
 
-### 1.1 必要な設定 ⚙️
+## 1. シナリオベースのコード例
 
-1. ビジネス名を登録し、`ApiKey` と `ApiSecret` を取得します；
+### 1.1 完全な API 呼び出しと応答の検証
 
-2. 独自の `RSA` キーペアを生成します；
-
-3. プラットフォームの `RSA` 公開鍵を準備します；
-
-### 1.2 署名オブジェクトの作成 🔏
-
-1. 設定ファイル `config.yaml` を追加します。
-
-```yaml
-# ビジネス情報を設定
-ApiKey: ""
-ApiSecret: ""
-# プラットフォーム公開鍵
-PlatformPubKey: ""
-# プラットフォームのブロック公開鍵
-PlatformRiskPubKey: ""
-# 独自の秘密鍵
-RsaPrivateKey: ""
-```
-
-2. 設定ファイルをロードし、APIオブジェクトを作成します。
+次のコードは、SDK を使用して「ユーザー作成」リクエストを構築し、HTTP リクエストを送信し、プラットフォームから返されたデータの署名のセキュリティを検証する方法を示しています。
 
 ```rust
+use pay_sdk_rust::{
+    response_define::ResponseCommon,
+    rsa_utils,
+    sdk::{load_config, SDKConfig, Sdk},
+};
+use reqwest::Client;
 
-	let cfg = load_config("./config.yaml")?;
-    
-    let sdk_config = SDKConfig {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // 1. SDKの初期化
+    let cfg = load_config("./config.yaml")?;
+    let sdk = Sdk::new(SDKConfig {
         api_key: cfg.api_key,
         api_secret: cfg.api_secret,
         platform_pub_key: cfg.platform_pub_key,
         platform_risk_pub_key: cfg.platform_risk_pub_key,
         rsa_private_key: cfg.rsa_private_key,
-    };
+    });
 
-```
-
-### 1.3 リクエストデータの作成と署名 ✍️
-
-ユーザー作成を例にします。
-
-```rust
-
-	// ....
-	let open_id = "user_002";
-
+    // 2. リクエストパラメータと署名ヘッダーの生成
+    let open_id = "PT00001";
     let (req_body, timestamp, sign, client_sign) = sdk.create_user(open_id)?;
 
-
-```
-
-```rust
-	let map_data: HashMap<String, String> =
-            serde_json::from_value(serde_json::to_value(&req)?)?;
-	let data_str = rsa_utils::compose_params(&map_data);
-	let timestamp = Utc::now().timestamp_millis().to_string();
-	let sign = self.generate_md5_sign(&data_str, &timestamp);
-	let client_sign = self.generate_rsa_signature(&map_data)?;
-	let j_str = serde_json::to_string(&req)?;
-```
-
-### 1.4 リクエストの入力と開始 🚀
-
-```rust
-	// ....
-	
+    // 3. HTTPリクエストの送信
     let client = Client::new();
     let url = "https://sandbox-api.privatex.io/sdk/user/create";
-
     let resp = client.post(url)
         .header("Content-Type", "application/json")
         .header("key", sdk.config.api_key.clone())
@@ -87,71 +50,72 @@ RsaPrivateKey: ""
         .await?;
 
     let body = resp.text().await?;
-    println!("Response: {}", body);
-
-```
-
-### 1.5 返却データの検証と解析 ✅
-
-```rust
-
+    
+    // 4. レスポンス署名の自動検証
     let parsed: ResponseCommon = serde_json::from_str(&body)?;
-    println!("Parsed response: {:?}", parsed);
     if parsed.code != 1 {
-        return Err(anyhow::anyhow!("Error response: {}", parsed.msg));
-    }
-    match rsa_utils::to_string_map(&body) {
-        Ok(map_data) => {
-            match serde_json::from_str::<pay_sdk_rust::response_define::ResponseCreateUser>(&body) {
-                Ok(rsp_data) => {
-                    let sign = rsp_data.sign.clone();
-                    match sdk.verify_rsa_signature(&map_data, &sign) {
-                        Ok(_) => println!("verify signature success!"),
-                        Err(e) => eprintln!("verify signature failed: {:?}", e),
-                    }
-                }
-                Err(e) => eprintln!("parse JSON ResponseCreateUser failed: {:?}", e),
-            }
-        }
-        Err(e) => eprintln!("convert to map[string]string failed: {:?}", e),
+        println!("リクエスト失敗: {}", parsed.msg);
+        return Ok(());
     }
 
+    let map_data = rsa_utils::to_string_map(&body)?;
+    let rsp_data: pay_sdk_rust::response_define::ResponseCreateUser = serde_json::from_str(&body)?;
+    
+    match sdk.verify_rsa_signature(&map_data, &rsp_data.sign) {
+        Ok(_) => println!("✅ リクエスト成功および検証完了！返されたOpenId: {}", rsp_data.data.open_id),
+        Err(e) => println!("❌ 署名検証失敗: {:?}", e),
+    }
+
+    Ok(())
+}
 ```
 
-## 2. 実行可能なインターフェースコマンドの生成
 
-* 1. SDKルートディレクトリで`cargo build --example create_user_client`コマンドを実行し、`pay-sdk-rust/target/debug/examples/`ディレクトリに各機能コマンドのバイナリ実行可能ファイルを生成します。
+---
 
-* 2. ".exe" サフィックスのファイルは64ビットWindowsマシンで実行されます；サフィックスなしのファイルはLinux/Macで実行されます。例えば、create_user.exe と create_user 実行可能ファイル。
+## 2. CLI ツールの使用ガイド
 
-* 3. 設定されたconfig.yamlファイルを`pay-sdk-rust/target/debug/examples/`ディレクトリにコピーします。
+SDK には、各 API エンドポイントをすばやくテストするためのコマンドラインインターフェース (CLI) バイナリファイルが用意されています。
 
-## 3. コマンドの呼び出し 📞
+### 2.1 実行可能ファイルのコンパイル
 
-### 3.1. 新規ユーザーの登録 🆕
+SDK のルートディレクトリで `cargo build --examples` コマンドを実行すると、システムは `target/debug/examples/` ディレクトリの各機能のバイナリ実行可能ファイルを生成します。
+* **Windows:** `.exe` で終わるファイルを生成します (例: `create_user.exe`)。
+* **Mac/Linux:** 拡張子のないファイルを生成します (例: `create_user`)。
 
+### 2.2 設定ファイルの準備
 
-SDKの`pay-sdk-rust/target/debug/examples/`ディレクトリに移動し、そこにあるconfig.yamlファイルのUserOpenIdフィールドを変更します。
+ツールを実行する前に、設定済みの `config.yaml` ファイルが実行ディレクトリ（通常はプロジェクトのルートディレクトリまたは `target/debug/examples/`）に配置されていることを確認してください。
 
-create_user または create_user.exe 実行可能ファイルを実行して、プラットフォームに新規ユーザーを登録します。
+### 2.3 エンドポイントコマンドのテスト
 
-すでに登録されている新規UserOpenIdを登録しようとすると、エラーが返されます。
+#### 新規ユーザーの登録
+1. `config.yaml` の `UserOpenId` フィールドを変更します。
+2. `cargo run --example create_user_client` を実行します。
+3. OpenId がすでに登録されている場合、ツールはエラーを返します。
 
+#### ウォレットの登録
+1. `config.yaml` で `UserOpenId` と `ChainID` を指定します。
+2. `cargo run --example create_wallet` を実行します。
 
-### 3.2. ウォレット登録 💼
+#### 入金アドレスの取得
+1. `config.yaml` で、`UserOpenId` とクエリする `ChainIDs` (例: "1,56") を指定します。
+2. `cargo run --example get_wallet_addresses` を実行します。
 
-SDKの`pay-sdk-rust/target/debug/examples/`ディレクトリに移動し、`config.yaml` ファイルで `UserOpenId` と `ChainID` フィールドを指定します。
+#### 出金の申請
+1. `config.yaml` で次を指定します。
+   * `UserOpenId`
+   * `TokenId`
+   * `Amount`
+   * `AddressTo`
+   * `SafeCheckCode` (一意の注文重複防止コード)
+   * `CallbackUrl`
+2. `cargo run --example user_withdraw_by_open_id` を実行します。
 
-`create_wallet` または `create_wallet.exe` 実行可能ファイルを実行して、プラットフォームでのユーザーのウォレット登録を完了します。
+#### レジ注文の作成
+1. `config.yaml` で `OutOrderNo`, `TokenId`, `Quantity`, `NotifyUrl` を指定します。
+2. `cargo run --example new_order` を実行します。
 
-### 3.3. 入金アドレスの取得 📍
-
-SDKの`pay-sdk-rust/target/debug/examples/`ディレクトリに移動し、`config.yaml` で `UserOpenId` と `ChainIDs` フィールドを指定します。
-
-`get_wallet_addresses` または `get_wallet_addresses.exe` 実行可能ファイルを実行します。
-
-### 3.4. 出金 💸
-
-SDKの`pay-sdk-rust/target/debug/examples/`ディレクトリに移動し、`config.yaml` で `UserOpenId`、`TokenId`、`Amount`、`AddressTo`、`SafeCheckCode`、および `CallbackUrl` フィールドを指定します。
-
-`user_withdraw_by_open_id` または `user_withdraw_by_open_id.exe` 実行可能ファイルを実行します。
+#### ウォレット残高照会
+1. `config.yaml` で `WalletAddress`, `ContractAddress`, `WalletBalanceChainId` を指定します。
+2. `cargo run --example wallet_balance` を実行します。

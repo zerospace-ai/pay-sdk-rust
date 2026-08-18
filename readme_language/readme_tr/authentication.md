@@ -1,45 +1,89 @@
-# İstek Doğrulama Başlığı
+# Kimlik Doğrulama ve Güvenlik
 
-İstek Başlığı Tanımı
+Bu sistem, tüccar ile platform arasındaki veri güvenliğini sağlamak için sıkı bir istek imza mekanizması kullanır. İletişim süreci MD5 imzalarını ve RSA imza doğrulamasını içerir.
 
-| Parametre Adı | Kısıtlamalar | Örnek                              | Açıklama                                         |
-| :------------ | :----------- | :--------------------------------- | :----------------------------------------------- |
-| key           | Uzunluk: 64  | ithujj3onrzbgw5t                   | Ortak anahtarı                                   |
-| timestamp     | Uzunluk: 32  | 1722586649000                      | İstek başlatma zaman damgası (birim: milisaniye) |
-| sign          | Uzunluk: 32  | 9e0ccfe3915e94bcc5bf7dd51ad4e8d9   | Ortak gizli imza                                 |
-| clientSign    | Uzunluk: 512 | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | Ortak RSA imzası                                 |
+## 1. RSA Anahtar Çifti Oluşturma
 
-## `sign` Alan Kuralları
+Tüccarların kendi RSA anahtar çiftini oluşturması, istekleri imzalamak için özel anahtarı kullanması ve genel anahtarı platforma göndermesi gerekir.
 
-1. Ortağı kaydedin ve `key` ve `secret` elde edin.
-2. İsteği ayrıştırın. JSON gövdesini JSON anahtarlarının ASCII artan sırasına göre sıralayın ve dizeleri dataStr=key1=value1&key2=value2&key3=value3&... olarak birleştirin.
-3. Zaman damgası oluşturun (birim: milisaniye)
-4. Şifreleyin ve sign oluşturun: Şifreleme öncesi metin: strToHash = Secret+dataStr+timestamp Metni strToHash üzerinde MD5 şifrelemesi yaparak sign oluşturun.
-Özel kod GenerateMD5Sign fonksiyonudur.
-5. key, timestamp ve sign'ı HTTP başlığına yerleştirin.
+### 1.1 OpenSSL Kullanarak Anahtar Çifti Oluşturma
 
-## `clientSign` İmza Algoritmasının Ayrıntılı Açıklaması
+Aşağıdaki komutları Mac, Linux veya Git Bash/WSL/Cygwin üzerinde yürütün:
 
-1. İstek parametrelerini alın ve formatlayarak yeni bir formatlanmış dize elde edin.
+```bash
+# 2048 bit özel anahtar oluştur
+openssl genrsa -out rsa_private_key.pem 2048
 
-2. Adım 1'deki verileri RSA özel anahtarıyla imzalayın ve imza sonucunu bir değişkene kaydedin.
-Aşağıdaki parametre dizisi için imza dizesi oluşturun: `user_id = 1 coin = eth address = 0x038B8E7406dED2Be112B6c7E4681Df5316957cad amount = 10.001 trade_id = 20220131012030274786`
-Dizideki her anahtarı a'dan z'ye sıralayın. İlk harf aynıysa, ikinci harfe bakın ve böyle devam edin. Sıralandıktan sonra, tüm dizi değerlerini ampersand (&) karakteriyle birleştirin, örneğin $dataString'de:
-`address=0x038B8E7406dED2Be112B6c7E4681Df5316957cad&amount=10.001&coin=eth&trade_id=20220131012030274786&user_id=1`
-Bu dize birleştirilmiş dizedir.
+# Özel anahtardan genel anahtar oluştur
+openssl rsa -in rsa_private_key.pem -out rsa_public_key.pem -pubout
+```
 
-3. Özel anahtarı kullanarak verileri RSA-MD5 ile imzalayın. Özel kod generate_md5_sign fonksiyonundadır.
+### 1.2 Anahtar Dizelerini Ayıklama
 
-# Genel Bilgiler
+Oluşturulan genel anahtarın `-----BEGIN PUBLIC KEY-----` / `-----END PUBLIC KEY-----` satırları ile yeni satır karakterleri (newline) kaldırılmalı ve platforma gönderilmeden önce tek satırlık bir dizeye dönüştürülmelidir.
 
-| Ad               | Tür       | Örnek                              | Açıklama                                                       |
-| :--------------- | :-------- | :--------------------------------- | :------------------------------------------------------------- |
-| Genel Durum Kodu | integer   | 1                                  | 1 başarıyı belirtir. Ayrıntılar için Genel Durum Koduna bakın. |
-| Mesaj            | string    | ok                                 | Metin bilgisi döndürür.                                        |
-| Veri             | json      | {"OpenID":"HEX..."}                | Belirli veri içeriğini döndürür.                               |
-| Zaman            | timeStamp | 1722587274000                      | UTC zamanı (zaman dilimsiz, milisaniye cinsinden).             |
-| İmza             | string    | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | Platform tüm verileri RSA ile imzalar.                         |
+**Mac/Linux/Git Bash üzerinde ayıklama:**
 
-Platform tarafından döndürülen Sign, yanıt verilerini RSA algoritması kullanarak şifreleme sonucudur. Ön uç, döndürülen verilere karşı imzayı doğrulamalıdır. Ayrıntılar için func: 
+```bash
+# Özel anahtar dizesini ayıkla
+grep -v '^-----' rsa_private_key.pem | tr -d '\n'; echo
 
-pub fn verify_rsa_signature` fonksiyonuna bakın.
+# Genel anahtar dizesini ayıkla
+grep -v '^-----' rsa_public_key.pem | tr -d '\n'; echo
+```
+
+**Windows PowerShell üzerinde ayıklama:**
+
+```powershell
+# Özel anahtarı ayıkla
+Write-Output ((Get-Content rsa_private_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+
+# Genel anahtarı ayıkla
+Write-Output ((Get-Content rsa_public_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+```
+
+> **⚠️ Uyarı:** Ayıklanan özel anahtar, yerel sunucunuzda güvenli bir şekilde saklanmalı (`config.yaml` içindeki `RsaPrivateKey` alanına girilmeli) ve **kesinlikle sızdırılmamalıdır**.
+
+---
+
+## 2. Doğrulama Header Tanımı
+
+Bir HTTP isteğinde bulunurken, Header'a aşağıdaki kimlik doğrulama parametreleri dahil edilmelidir:
+
+| Parametre Adı | Kısıtlama | Örnek | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `key` | Uzunluk: 64 | `vratson2i5hjxgkd` | Tüccar kaydından sonra platform tarafından atanan API Key |
+| `timestamp` | Uzunluk: 32 | `1725076567682` | İsteğin zaman damgası (Birim: milisaniye) |
+| `sign` | Uzunluk: 32 | `0592dc64d480fb119d1e07ce0601db` | İstek içeriğinde MD5 algoritması kullanılarak oluşturulan imza |
+| `clientSign` | Uzunluk: 512 | `9e0ccfe3915e94bcc5bfbBsC...` | İstek içeriğinde tüccarın RSA özel anahtarı kullanılarak oluşturulan imza |
+
+---
+
+## 3. Ayrıntılı İmza Algoritması
+
+SDK, tüm imza mantığını dahili olarak otomatik bir şekilde yönetir. Başka bir dildeki sürümü bağımsız olarak geliştirmeniz gerekiyorsa veya imzanın altında yatan prensipleri anlamak istiyorsanız, lütfen aşağıdaki talimatlara başvurun.
+
+### 3.1 `sign` Alanı Kuralları (MD5 İmzası)
+
+1. Platformun `Secret` değerini alın.
+2. İsteğin JSON gövdesini anahtara göre artan ASCII sırasına dizin ve `key1=value1&key2=value2...` formatında bir dize halinde birleştirin; buna `dataStr` adını verin.
+3. Geçerli zaman damgasını (milisaniye) alın.
+4. Şifrelenecek düz metni birleştirin: `strToHash = Secret + dataStr + timestamp`.
+5. `strToHash` üzerinde MD5 şifrelemesi gerçekleştirin; oluşturulan sonuç `sign` değeridir.
+
+### 3.2 `clientSign` Alanı Kuralları (RSA İmzası)
+
+1. İstek parametrelerini anahtara göre artan ASCII sırasına dizin.
+2. Tüm dizi değerlerini `&` karakterini kullanarak birleştirin, örneğin:
+   `address=0x038B8...&amount=10.001&coin=eth&trade_id=2022013101`
+3. Birleştirilmiş bu dize üzerinde `RSA-MD5` imzası gerçekleştirmek için tüccarın RSA özel anahtarını kullanın. Oluşturulan sonuç `clientSign` değeridir.
+
+---
+
+## 4. Platform Yanıtı İmza Doğrulaması
+
+Platform tarafından döndürülen veriler ayrıca, platformun yanıt verilerini kendi RSA özel anahtarını kullanarak şifrelemesinin sonucu olan bir `sign` alanı içerecektir.
+
+Tüccar yanıtı aldıktan sonra, verilerin tahrif edilmediğinden emin olmak için bu imzayı doğrulamak amacıyla `config.yaml` içindeki `PlatformPubKey` (platformun genel anahtarı) değerini kullanmalıdır.
+
+> **💡 İpucu:** Rust SDK, geliştiricilerin platform tarafından döndürülen verileri hızlı bir şekilde doğrulaması için `verify_rsa_signature(&self, map_data: &HashMap<String, String>, sign: &str) -> Result<()>` yöntemini sağlar.

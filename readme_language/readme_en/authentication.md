@@ -1,46 +1,89 @@
+# Authentication and Security
 
-# Request Verification Header
+This system uses a strict request signature mechanism to ensure data security between the merchant and the platform. The communication process involves MD5 signatures and RSA signature verification.
 
-Request Header Definition
+## 1. Generate RSA Key Pair
 
-| Parameter Name | Constraints | Example                            | Description                                          |
-| :------------- | :---------- | :--------------------------------- | :--------------------------------------------------- |
-| key            | Length: 64  | ithujj3onrzbgw5t                   | Partner key                                          |
-| timestamp      | Length: 32  | 1722586649000                      | Timestamp of request initiation (unit: milliseconds) |
-| sign           | Length: 32  | 9e0ccfe3915e94bcc5bf7dd51ad4e8d9   | Partner secret signature                             |
-| clientSign     | Length: 512 | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | Partner RSA signature                                |
+Merchants need to generate their own RSA key pair, use the private key to sign requests, and submit the public key to the platform.
 
-## `sign` Field Rules
+### 1.1 Generate Key Pair using OpenSSL
 
-1. Register the partner and obtain the `key` and `secret`.
-2. Parse the request. Sort the JSON body by ASCII ascending order of the keys in the JSON, and concatenate the strings dataStr=key1=value1&key2=value2&key3=value3&...
-3. Generate a timestamp (unit: milliseconds)
-4. Encrypt and generate a sign: Plaintext before encryption: strToHash = Secret+dataStr+timestamp Perform MD5 encryption on the plaintext strToHash to generate the sign.
-The specific code is the GenerateMD5Sign function.
-5. Place the key, timestamp, and sign in the HTTP header.
+Execute the following commands on Mac, Linux, or Git Bash/WSL/Cygwin:
 
-## Detailed Explanation of the `clientSign` Signature Algorithm
+```bash
+# Generate 2048-bit private key
+openssl genrsa -out rsa_private_key.pem 2048
 
-1. Obtain the request parameters and format them to obtain a new formatted string.
+# Generate public key from private key
+openssl rsa -in rsa_private_key.pem -out rsa_public_key.pem -pubout
+```
 
-2. Sign the data from step 1 with the RSA private key and save the signature result to a variable.
-Generate a signature string for the following parameter array: `user_id = 1 coin = eth address = 0x038B8E7406dED2Be112B6c7E4681Df5316957cad amount = 10.001 trade_id = 20220131012030274786`
-Sort each key in the array from a to z. If the first letter is the same, look at the second letter, and so on. After sorting, concatenate all array values ​​with the ampersand (&) character, for example, in $dataString:
-`address=0x038B8E7406dED2Be112B6c7E4681Df5316957cad&amount=10.001&coin=eth&trade_id=20220131012030274786&user_id=1`
-This string is the concatenated string.
+### 1.2 Extract Key Strings
 
-3. Use the private key to sign the data using RSA-MD5. The specific code is in the generate_md5_sign function.
+The generated public key needs to have the `-----BEGIN PUBLIC KEY-----` / `-----END PUBLIC KEY-----` lines and newline characters removed, and be converted to a single-line string before submitting to the platform.
 
-# Public Information
+**Extract on Mac/Linux/Git Bash:**
 
-| Name               | Type      | Example                            | Description                                              |
-| :----------------- | :-------- | :--------------------------------- | :------------------------------------------------------- |
-| Global Status Code | integer   | 1                                  | 1 indicates success. See Global Status Code for details. |
-| Message            | string    | ok                                 | Returns text information.                                |
-| Data               | json      | {"OpenID":"HEX..."}                | Returns specific data content.                           |
-| Time               | timeStamp | 1722587274000                      | UTC time (without time zone, in milliseconds).           |
-| Sign               | string    | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | The platform uses RSA to sign all data.                  |
+```bash
+# Extract private key string
+grep -v '^-----' rsa_private_key.pem | tr -d '\n'; echo
 
-The Sign returned by the platform is the result of encrypting the response data using the RSA algorithm. The frontend should verify the signature against the returned data. For details, please refer to the function func: 
+# Extract public key string
+grep -v '^-----' rsa_public_key.pem | tr -d '\n'; echo
+```
 
-pub fn verify_rsa_signature`
+**Extract on Windows PowerShell:**
+
+```powershell
+# Extract private key
+Write-Output ((Get-Content rsa_private_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+
+# Extract public key
+Write-Output ((Get-Content rsa_public_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+```
+
+> **⚠️ Warning:** The extracted private key must be stored securely on your local server (filled into the `RsaPrivateKey` field of `config.yaml`) and **must never be leaked**.
+
+---
+
+## 2. Request Validation Headers Definition
+
+When making an HTTP request, the following authentication parameters must be included in the Header:
+
+| Parameter Name | Constraint | Example | Description |
+| :--- | :--- | :--- | :--- |
+| `key` | Length: 64 | `vratson2i5hjxgkd` | API Key assigned by the platform after merchant registration |
+| `timestamp` | Length: 32 | `1725076567682` | Timestamp of the request (Unit: milliseconds) |
+| `sign` | Length: 32 | `0592dc64d480fb119d1e07ce0601db` | Signature generated using the MD5 algorithm on the request content |
+| `clientSign` | Length: 512 | `9e0ccfe3915e94bcc5bfbBsC...` | Signature generated using the merchant's RSA private key on the request content |
+
+---
+
+## 3. Detailed Signature Algorithm
+
+The SDK internally handles all signature logic automatically. If you need to develop a version in another language independently, or understand the underlying principles of the signature, please refer to the following instructions.
+
+### 3.1 `sign` Field Rules (MD5 Signature)
+
+1. Obtain the platform's `Secret`.
+2. Sort the JSON body of the request in ascending ASCII order by key, and concatenate it into a string formatted as `key1=value1&key2=value2...`, noted as `dataStr`.
+3. Obtain the current timestamp (milliseconds).
+4. Splice the plaintext to be encrypted: `strToHash = Secret + dataStr + timestamp`.
+5. Perform MD5 encryption on `strToHash`, and the generated result is the `sign`.
+
+### 3.2 `clientSign` Field Rules (RSA Signature)
+
+1. Sort the request parameters in ascending ASCII order by key.
+2. Connect all array values using the `&` character, for example:
+   `address=0x038B8...&amount=10.001&coin=eth&trade_id=2022013101`
+3. Use the merchant's RSA private key to perform `RSA-MD5` signature on this concatenated string. The generated result is the `clientSign`.
+
+---
+
+## 4. Platform Response Signature Verification
+
+The data returned by the platform will also contain a `sign` field, which is the result of the platform encrypting the response data using its RSA private key.
+
+After the merchant receives the response, they must use `PlatformPubKey` (the platform's public key) in `config.yaml` to verify this signature to ensure the data has not been tampered with.
+
+> **💡 Tip:** The Rust SDK provides the `verify_rsa_signature(&self, map_data: &HashMap<String, String>, sign: &str) -> Result<()>` method for developers to quickly verify the data returned by the platform.

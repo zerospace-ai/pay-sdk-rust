@@ -1,45 +1,89 @@
-# 请求验证头
+# 认证与安全
 
-请求头定义
+本系统使用严格的请求签名机制来确保商户与平台之间的数据安全。通信过程涉及 MD5 签名和 RSA 签名验证。
 
-| 参数名称 | 约束 | 示例 | 描述 |
-| :--------- | :-------- | :--------------------------------- | :----------------------------- |
-| key | 长度: 64 | ithujj3onrzbgw5t | 合作伙伴 key |
-| timestamp | 长度: 32 | 1722586649000 | 请求发起时间戳 (单位: 毫秒) |
-| sign | 长度: 32 | 9e0ccfe3915e94bcc5bf7dd51ad4e8d9 | 合作伙伴 secret 签名 |
-| clientSign | 长度: 512 | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | 合作伙伴 RSA 签名 |
+## 1. 生成 RSA 密钥对
 
-## `sign` 字段规则
+商户需要自己生成 RSA 密钥对，使用私钥对请求进行签名，并将公钥提交给平台。
 
-1. 注册合作伙伴并获取 `key` 和 `secret`。
-2. 解析请求。将 JSON body 按键的 ASCII 升序排序，并连接字符串 dataStr=key1=value1&key2=value2&key3=value3&...
-3. 生成时间戳 (单位: 毫秒)
-4. 加密生成 sign: 加密前的明文: strToHash = Secret+dataStr+timestamp 对明文 strToHash 执行 MD5 加密生成 sign。
-具体代码为 GenerateMD5Sign 函数。
-5. 将 key、timestamp 和 sign 放置在 HTTP 头中。
+### 1.1 使用 OpenSSL 生成密钥对
 
-## `clientSign` 签名算法详细说明
+在 Mac、Linux 或 Git Bash/WSL/Cygwin 上执行以下命令：
 
-1. 获取请求参数并格式化以获得新的格式化字符串。
+```bash
+# 生成 2048 位私钥
+openssl genrsa -out rsa_private_key.pem 2048
 
-2. 使用 RSA 私钥对步骤 1 中的数据签名，并将签名结果保存到变量。
-为以下参数数组生成签名字符串: `user_id = 1 coin = eth address = 0x038B8E7406dED2Be112B6c7E4681Df5316957cad amount = 10.001 trade_id = 20220131012030274786`
-将数组中的每个键从 a 到 z 排序。如果第一个字母相同，则查看第二个字母，依此类推。排序后，使用 & 字符连接所有数组值，例如在 $dataString 中:
-`address=0x038B8E7406dED2Be112B6c7E4681Df5316957cad&amount=10.001&coin=eth&trade_id=20220131012030274786&user_id=1`
-此字符串即为连接字符串。
+# 根据私钥生成公钥
+openssl rsa -in rsa_private_key.pem -out rsa_public_key.pem -pubout
+```
 
-3. 使用私钥对数据进行 RSA-MD5 签名。具体代码在 generate_md5_sign 函数中。
+### 1.2 提取密钥字符串
 
-# 公共信息
+生成的公钥需要去掉开头和结尾的 `-----BEGIN PUBLIC KEY-----` / `-----END PUBLIC KEY-----`，并去掉换行符，转换为单行字符串后提交到平台。
 
-| 名称 | 类型 | 示例 | 描述 |
-| :--------- | :-------- | :--------------------------------- | :--------------------------------- |
-| 全局状态码 | integer | 1 | 1 表示成功。详情见全局状态码。 |
-| 消息 | string | ok | 返回文本信息。 |
-| 数据 | json | {"OpenID":"HEX..."} | 返回具体数据内容。 |
-| 时间 | timeStamp | 1722587274000 | UTC 时间（无时区，以毫秒为单位）。 |
-| 签名 | string | 9e0ccfe3915e94bcc5bfbBsC5EUxV6 ... | 平台使用 RSA 对所有数据签名。 |
+**在 Mac/Linux/Git Bash 上提取：**
 
-平台返回的 Sign 是使用 RSA 算法对响应数据加密的结果。前端应针对返回的数据验证签名。详情请参阅函数 func: 
+```bash
+# 提取私钥字符串
+grep -v '^-----' rsa_private_key.pem | tr -d '\n'; echo
 
-`pub fn verify_rsa_signature`
+# 提取公钥字符串
+grep -v '^-----' rsa_public_key.pem | tr -d '\n'; echo
+```
+
+**在 Windows PowerShell 上提取：**
+
+```powershell
+# 提取私钥
+Write-Output ((Get-Content rsa_private_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+
+# 提取公钥
+Write-Output ((Get-Content rsa_public_key.pem | Where-Object {$_ -notmatch "^-----"}) -join "")
+```
+
+> **⚠️ 注意：** 提取出的私钥必须保存在本地服务器（填入 `config.yaml` 的 `RsaPrivateKey` 字段），**严禁泄露**。
+
+---
+
+## 2. 请求验证头定义
+
+在发起 HTTP 请求时，需要在 Header 中包含以下认证参数：
+
+| 参数名称 | 约束 | 示例 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `key` | 长度: 64 | `vratson2i5hjxgkd` | 商户注册后由平台分配的 API Key |
+| `timestamp` | 长度: 32 | `1725076567682` | 请求发起的时间戳 (单位: 毫秒) |
+| `sign` | 长度: 32 | `0592dc64d480fb119d1e07ce0601db` | 使用 MD5 算法对请求内容生成的签名 |
+| `clientSign` | 长度: 512 | `9e0ccfe3915e94bcc5bfbBsC...` | 使用商户的 RSA 私钥对请求内容生成的签名 |
+
+---
+
+## 3. 签名算法详细说明
+
+SDK 内部已经自动处理了所有签名逻辑。如果你需要独立开发其他语言版本，或者了解签名的底层原理，请参考以下说明。
+
+### 3.1 `sign` 字段规则 (MD5 签名)
+
+1. 获取平台的 `Secret`。
+2. 将请求的 JSON body 按键的 ASCII 升序排序，并拼接成格式为 `key1=value1&key2=value2...` 的字符串，记为 `dataStr`。
+3. 获取当前时间戳（毫秒）。
+4. 拼接待加密明文：`strToHash = Secret + dataStr + timestamp`。
+5. 对 `strToHash` 执行 MD5 加密，生成的结果即为 `sign`。
+
+### 3.2 `clientSign` 字段规则 (RSA 签名)
+
+1. 将请求参数按照键的 ASCII 升序排序。
+2. 使用 `&` 字符连接所有数组值，例如：
+   `address=0x038B8...&amount=10.001&coin=eth&trade_id=2022013101`
+3. 使用商户的 RSA 私钥对此拼接字符串进行 `RSA-MD5` 签名，生成的结果即为 `clientSign`。
+
+---
+
+## 4. 平台响应签名验证
+
+平台返回的数据中也会包含 `sign` 字段，这是平台使用其 RSA 私钥对响应数据加密的结果。
+
+商户端收到响应后，必须使用 `config.yaml` 中的 `PlatformPubKey`（平台公钥）来验证此签名，以确保数据未被篡改。
+
+> **💡 提示：** Rust SDK 已提供 `verify_rsa_signature(&self, map_data: &HashMap<String, String>, sign: &str) -> Result<()>` 方法供开发者快捷验证平台返回的数据。

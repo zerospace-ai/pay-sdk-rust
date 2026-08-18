@@ -44,6 +44,7 @@ pub fn sign_data(key: &RsaPrivateKey, data: &str) -> Result<String> {
 }
 
 pub fn verify_signature(public_key: &RsaPublicKey, data: &str, signature: &str) -> Result<()> {
+    // Base64 decode signature
     let sig_bytes = general_purpose::STANDARD.decode(signature.trim())?;
     let mut hasher = Md5::new();
     hasher.update(data);
@@ -51,8 +52,8 @@ pub fn verify_signature(public_key: &RsaPublicKey, data: &str, signature: &str) 
 
     let padding = Pkcs1v15Sign::new::<md5::Md5>();
     match public_key.verify(padding, &hashed_data, &sig_bytes) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(anyhow::anyhow!("verify fail: {}", e)),
+        Ok(_) => Ok(()),                                      // Verification succeeded
+        Err(e) => Err(anyhow::anyhow!("verify fail: {}", e)), // Verification failed
     }
 }
 

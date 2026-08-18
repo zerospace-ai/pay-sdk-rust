@@ -1,32 +1,57 @@
-# API Referansı 📚
+# API Referansı
 
-Bu belge, CryptoPay Rust SDK'nın tüm API arayüzlerini detaylandırır, istek parametreleri, dönüş parametreleri ve örnekler dahil.
+Bu belge, istek parametreleri, dönüş parametreleri ve örnekler dahil olmak üzere CryptoPay Rust SDK'nın tüm API uç noktalarını ayrıntılı olarak açıklar.
 
-## Yeni Kullanıcı Kaydet (create_user)🆕🧑‍💻
+## İçindekiler
 
-### Kavram
-Yeni bir platform kullanıcısı oluşturun, kullanıcının benzersiz ID'si yani UserOpenId gereklidir.
+1. [Genel Herkese Açık Bilgiler](#1-genel-herkese-açık-bilgiler)
+2. [Yeni Kullanıcı Oluştur (create_user)](#2-yeni-kullanıcı-oluştur-create_user)
+3. [Cüzdan Oluştur (create_wallet)](#3-cüzdan-oluştur-create_wallet)
+4. [Para Yatırma Adreslerini Al (get_wallet_addresses)](#4-para-yatırma-adreslerini-al-get_wallet_addresses)
+5. [Kullanıcı Para Çekme (user_withdraw_by_open_id)](#5-kullanıcı-para-çekme-user_withdraw_by_open_id)
+6. [Para Çekme Siparişi İkincil İnceleme (Webhook)](#6-para-çekme-siparişi-ikincil-inceleme-webhook)
+7. [Para Yatırma ve Para Çekme Geri Çağırma Bildirimi (Webhook)](#7-para-yatırma-ve-para-çekme-geri-çağırma-bildirimi-webhook)
+8. [Kasa Siparişi Oluştur (new_order)](#8-kasa-siparişi-oluştur-new_order)
+9. [Kasa Siparişi Ödeme Başarısı Geri Çağırma (Webhook)](#9-kasa-siparişi-ödeme-başarısı-geri-çağırma-webhook)
+10. [Cüzdan Bakiyesini Sorgula (wallet_balance)](#10-cüzdan-bakiyesini-sorgula-wallet_balance)
+
+---
+
+## 1. Genel Herkese Açık Bilgiler
+
+Platform tarafından döndürülen tüm JSON yanıt verileri bu genel yapıyı izler:
+
+| Alan Adı | Tür | Örnek | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `code` | integer | `1` | Genel durum kodu. `1` başarıyı temsil eder, `0` veya `-1` başarısızlığı temsil eder |
+| `msg` | string | `ok` | Döndürülen metin açıklaması |
+| `data` | object | `{"OpenId":"PT00001"}` | API'ye göre değişen, döndürülen belirli veri içeriği |
+| `timestamp` | string | `"1725439986754"` | UTC Zaman Damgası (milisaniye) |
+| `sign` | string | `9e0ccfe3915e...` | Yanıt verilerinde kendi RSA özel anahtarını kullanarak platform tarafından oluşturulan imza |
+
+---
+
+## 2. Yeni Kullanıcı Oluştur (create_user)
+
+### API Açıklaması
+Kullanıcının UserOpenId olan benzersiz kimliğini gerektiren yeni bir platform kullanıcısı oluşturur.
 
 ### HTTP İsteği
-- Arayüz Adı: create_user
-- URL: https://sandbox-api.privatex.io/sdk/user/create
-- Yöntem: POST
+* **URL:** `https://sandbox-api.privatex.io/sdk/user/create`
+* **Yöntem:** `POST`
 
 ### İstek Parametreleri
-| Parametre Adı | Zorunlu | Tür    | Açıklama                                                                               |
-| ------------- | ------- | ------ | -------------------------------------------------------------------------------------- |
-| OpenId        | Evet    | string | Platform standart ön eki + kullanıcı benzersiz ID'si ile OpenId oluşturulması önerilir |
+| Parametre Adı | Zorunlu | Tür | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `OpenId` | Evet | string | OpenId'yi oluşturmak için platform standart öneki + kullanıcının benzersiz kimliğinin kullanılması önerilir. |
 
-### Dönüş Parametreleri
-| Parametre Adı | Tür    | Açıklama                   |
-| ------------- | ------ | -------------------------- |
-| code          | int    | Genel durum kodu           |
-| msg           | string | Durum açıklaması           |
-| data.OpenId   | string | Kullanıcı benzersiz OpenId |
-| sign          | string | Platform imzası            |
+### Yanıt Parametreleri
+*(Genel Bilgileri İçerir)*
+| Parametre Adı | Tür | Açıklama |
+| :--- | :--- | :--- |
+| `data.OpenId` | string | Kullanıcının benzersiz OpenId'si |
 
-### Örnek
-İstek Örneği:
+### Örnek Kod (cURL)
 ```bash
 curl --location 'https://sandbox-api.privatex.io/sdk/user/create' \
 --header 'key: vratson2i5hjxgkd' \
@@ -38,47 +63,32 @@ curl --location 'https://sandbox-api.privatex.io/sdk/user/create' \
   "OpenId":"PT00001"
 }'
 ```
-Dönüş Örneği:
-```json
-{
-    "code": 1,
-    "msg": "ok",
-    "data": {
-        "OpenId": "PT00001"
-    },
-    "sign": "..."
-}
-```
 
-Kimlik Doğrulama ve Güvenlik için lütfen [🧩 authentication.md](./authentication.md) dosyasına bakın
+---
 
-## Cüzdan Oluştur (create_wallet) 💰
+## 3. Cüzdan Oluştur (create_wallet)
 
-### Kavram
-Kullanıcı için ilgili blockchain ağında bir cüzdan hesabı oluşturun.
+### API Açıklaması
+Belirtilen blockchain ağında kullanıcı için bir cüzdan hesabı oluşturur.
 
 ### HTTP İsteği
-- Arayüz Adı: create_wallet
-- URL: https://sandbox-api.privatex.io/sdk/wallet/create
-- Yöntem: POST
+* **URL:** `https://sandbox-api.privatex.io/sdk/wallet/create`
+* **Yöntem:** `POST`
 
 ### İstek Parametreleri
-| Parametre Adı | Zorunlu | Tür    | Açıklama                   |
-| ------------- | ------- | ------ | -------------------------- |
-| ChainID       | Evet    | string | Zincir ID                  |
-| OpenId        | Evet    | string | Kullanıcı benzersiz OpenId |
+| Parametre Adı | Zorunlu | Tür | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `ChainID` | Evet | string | Zincir Kimliği (Eke Bakın) |
+| `OpenId` | Evet | string | Kullanıcının benzersiz OpenId'si |
 
-### Dönüş Parametreleri
-| Parametre Adı | Tür    | Açıklama                   |
-| ------------- | ------ | -------------------------- |
-| code          | int    | Genel durum kodu           |
-| msg           | string | Durum açıklaması           |
-| data.address  | string | Cüzdan adresi              |
-| data.OpenId   | string | Kullanıcı benzersiz OpenId |
-| sign          | string | Platform imzası            |
+### Yanıt Parametreleri
+*(Genel Bilgileri İçerir)*
+| Parametre Adı | Tür | Açıklama |
+| :--- | :--- | :--- |
+| `data.address` | string | Cüzdan Adresi |
+| `data.OpenId` | string | Kullanıcının benzersiz OpenId'si |
 
-### Örnek
-İstek Örneği:
+### Örnek Kod (cURL)
 ```bash
 curl --location 'https://sandbox-api.privatex.io/sdk/wallet/create' \
 --header 'key: vratson2i5hjxgkd' \
@@ -91,45 +101,31 @@ curl --location 'https://sandbox-api.privatex.io/sdk/wallet/create' \
   "ChainID":"1"
 }'
 ```
-Dönüş Örneği:
-```json
-{
-    "code": 1,
-    "msg": "ok",
-    "data": {
-        "address": "...",
-        "OpenId": "PT00001"
-    },
-    "sign": "..."
-}
-```
 
-## Para Yatırma Adresi Al (get_wallet_addresses)💳
+---
 
-### Kavram
-Kullanıcının blockchain cüzdan para yatırma adresini alın.
+## 4. Para Yatırma Adreslerini Al (get_wallet_addresses)
+
+### API Açıklaması
+Bir kullanıcı için blockchain cüzdanı para yatırma adreslerini alır (birden fazla zincirde toplu sorgulamayı destekler).
 
 ### HTTP İsteği
-- Arayüz Adı: get_wallet_addresses
-- URL: https://sandbox-api.privatex.io/sdk/wallet/getWalletAddresses
-- Yöntem: POST
+* **URL:** `https://sandbox-api.privatex.io/sdk/wallet/getWalletAddresses`
+* **Yöntem:** `POST`
 
 ### İstek Parametreleri
-| Parametre Adı | Zorunlu | Tür    | Açıklama                                     |
-| ------------- | ------- | ------ | -------------------------------------------- |
-| OpenId        | Evet    | string | Kullanıcı benzersiz OpenId                   |
-| ChainIDs      | Evet    | string | Birden fazla zincir ID'si, virgülle ayrılmış |
+| Parametre Adı | Zorunlu | Tür | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `OpenId` | Evet | string | Kullanıcının benzersiz OpenId'si |
+| `ChainIDs` | Evet | string | Virgülle ayrılmış birden fazla Zincir Kimliği |
 
-### Dönüş Parametreleri
-| Parametre Adı  | Tür    | Açıklama         |
-| -------------- | ------ | ---------------- |
-| code           | int    | Genel durum kodu |
-| msg            | string | Durum açıklaması |
-| data.Addresses | array  | Adres listesi    |
-| sign           | string | Platform imzası  |
+### Yanıt Parametreleri
+*(Genel Bilgileri İçerir)*
+| Parametre Adı | Tür | Açıklama |
+| :--- | :--- | :--- |
+| `data.Addresses` | array | Adres nesnelerinin listesi |
 
-### Örnek
-İstek Örneği:
+### Örnek Kod (cURL)
 ```bash
 curl --location 'https://sandbox-api.privatex.io/sdk/wallet/getWalletAddresses' \
 --header 'key: vratson2i5hjxgkd' \
@@ -142,68 +138,46 @@ curl --location 'https://sandbox-api.privatex.io/sdk/wallet/getWalletAddresses' 
   "ChainIDs":"56,2"
 }'
 ```
-Dönüş Örneği:
-```json
-{
-    "code": 1,
-    "msg": "ok",
-    "data": {
-        "Addresses": [
-            {
-                "chainID": 56,
-                "address": "..."
-            }
-        ]
-    },
-    "sign": "..."
-}
-```
 
-## Kullanıcı Para Çekme (user_withdraw_by_open_id)💸
+---
 
-### Kavram
-Kullanıcı para çekme işlemi, ortak hesaptan kullanıcı belirtilen adrese transfer.
+## 5. Kullanıcı Para Çekme (user_withdraw_by_open_id)
 
-* İşlev: Kullanıcı para çekme işlemi arayüzü. Para çekmeler, ilgili token para çekme havuzundaki ortak hesabından kullanıcının belirtilen para çekme cüzdan adresine transfer edilmelidir. Ortaklar, para çekmenin meşruiyetini doğrulamak için güvenli bir geri çağrı adresi ayarlayabilir. Eğer doğrulanmışsa, para çekme doğrudan tüccarın fon havuzu cüzdanından tamamlanabilir.
+### API Açıklaması
+Ortağın fon havuzundan kullanıcı tarafından belirtilen adrese fon aktararak bir para çekme işlemi başlatır.
 
-* Para çekme işlem arayüzü, varsayılan para çekme sıcak cüzdanının yeterli para çekme varlıkları ve işlem ücretlerine sahip olup olmadığını kontrol eder.
+> **⚠️ Uyarı:**
+> * Blockchain ağında bir işlem başlatıldığında, **geri alınamaz veya iade edilemez**. Lütfen bu API'yi çağırmadan önce uygun risk kontrol kontrollerinin yapıldığından emin olun.
+> * Para çekme havuzunun yeterli token bakiyesi ve Gaz ücretlerine (ETH/TRX gibi) sahip olduğundan emin olmalısınız.
 
-* Varsayılan olarak, para çekme arayüzü güvenlik doğrulama kodunu para çekme işlemleri için benzersiz parametre gereksinimi olarak kullanır. Genellikle iş platformunun benzersiz para çekme sipariş numarasını güvenlik kodu olarak kullanmak önerilir. Yinelenen güvenlik doğrulama kodu göndermek hataya neden olur.
-
-* Tüm para çekme işlem istekleri, kanal platformunda yapılandırılan risk kontrol inceleme kurallarıyla eşleştirilir. Eğer parametre isteği geçerliyse, işlem isteği kabul edilir. Otomatik inceleme kurallarını karşılayan para çekme işlemleri hemen ağ işlemine gönderilir ve gönderilen işlemin hash bilgisi döndürülür (dönüş alanı data). Kanalda ikincil inceleme gerektiren para çekme işlem istekleri (code=2) döndürür. Para çekme isteği tekrar gönderilmez. Yönetici, kanal platformunda ikincil incelemeyi tamamlamalıdır. İkincil inceleme tamamlandıktan sonra, işlem siparişi para çekme işlem durumu değişikliğini bildirmek için geri çağrı yapar.
-
-* Önkoşul: İlgili para biriminin fon havuzunda yeterli miktarda fon bulunmalıdır (özellikle ETH ağı token para çekmeleri için, fon havuzu cüzdanında belirli miktarda ETH işlem ücreti bakiyesi gereklidir).
-
-* ⚠️ Not: **Blockchain para çekmeleri için, arayüzü çağırmadan önce ön onay sürecinin tamamlandığından emin olun. Bir blockchain işlemi başlatıldıktan sonra, iptal edilemez veya iade edilemez.**
+### İş Mantığı
+1. Mükerrer para çekme işlemlerini önlemek için genellikle iş platformundan benzersiz bir sipariş numarası `SafeCheckCode` olarak kullanılır.
+2. İşlem, platformun risk kontrol kurallarıyla eşleştirilir:
+   * **Otomatik Onaylı:** Doğrudan zincir üzerine (on-chain) gider ve `data` işlem karma (hash) değerini döndürür.
+   * **İkincil İnceleme (`code=2`):** Kanal platformunda bir yönetici tarafından manuel inceleme gerektirir. İncelendikten sonra, durum Webhook aracılığıyla eşzamansız olarak bildirilir.
 
 ### HTTP İsteği
-- Arayüz Adı: user_withdraw_by_open_id
-- URL: https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenID
-- Yöntem: POST
+* **URL:** `https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenID`
+* **Yöntem:** `POST`
 
 ### İstek Parametreleri
-| Parametre Adı | Zorunlu | Tür    | Açıklama                   |
-| ------------- | ------- | ------ | -------------------------- |
-| OpenId        | Evet    | string | Kullanıcı benzersiz OpenId |
-| TokenId       | Evet    | string | Token ID                   |
-| Amount        | Evet    | float  | Para çekme miktarı         |
-| AddressTo     | Evet    | string | Hedef adres                |
-| CallBackUrl   | Hayır   | string | Geri çağrı URL'si          |
-| SafeCheckCode | Hayır   | string | Güvenlik doğrulama kodu    |
+| Parametre Adı | Zorunlu | Tür | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `OpenId` | Evet | string | Kullanıcının benzersiz OpenId'si |
+| `TokenId` | Evet | string | Token Kimliği (Eke Bakın)|
+| `Amount` | Evet | float | Para çekme miktarı |
+| `AddressTo` | Evet | string | Hedef para çekme adresi |
+| `CallBackUrl` | Hayır | string | Durum değişikliği geri çağırma URL'si |
+| `SafeCheckCode` | Hayır | string | Güvenlik doğrulama kodu (İşletme Sipariş Kimliği) |
 
-### Dönüş Parametreleri
+### Yanıt Durum Kodu Açıklaması
+| `code` | Açıklama |
+| :--- | :--- |
+| `1` | İşlem başarılı ve zincir üzerine gönderildi, `data` karma değerini (hash) döndürür. |
+| `2` | İşlem gönderildi, ancak platform risk kontrolünü tetikledi ve ikincil inceleme gerektiriyor. |
+| `0` veya `-1` | Parametre hatası, yetersiz bakiye veya işlem başarısız. Ayrıntılar için `msg` değerini kontrol edin. |
 
-| Parametre Adı | Tür    | Açıklama                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| :------------ | :----- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| code          | int    | Durum Kodu</br>0 Parametre hatası, yinelenen sipariş numarası, yanlış para çekme adresi formatı veya yetersiz para çekme cüzdan ücretleri. Ayrıntılı bilgi msg'de bulunabilir.</br>1 Para çekme işlemi başarıyla gönderildi ve blockchain ağına gönderildi. Gönderilen işlemin benzersiz hash'i data'da bulunur.</br>2 Para çekme işlemi başarıyla gönderildi ve işlem tamamlanmadan önce ikincil kanal incelemesi gerektirir. İnceleme tamamlandıktan sonra, işlem bilgileri geri çağrı yoluyla güncellenir.</br>-1 Para çekme işlemi başarısız oldu. Para çekme isteğini tekrar gönderebilirsiniz. |
-| msg           | string | Durum Açıklama                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| data          | string | İşlem hash'i. Akıllı para çekme etkinleştirilmişse, bu alan boş dize olarak döndürülür.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| sign          | string | Platform imzası                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| timestamp     | string | Mevcut zaman damgası milisaniye olarak dize dönüştürülmüş                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-
-
-### Örnek
-İstek Örneği:
+### Örnek Kod (cURL)
 ```bash
 curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenID' \
 --header 'key: vratson2i5hjxgkd' \
@@ -221,71 +195,200 @@ curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenI
 }'
 ```
 
-Dönüş örneği
+---
+
+## 6. Para Çekme Siparişi İkincil İnceleme (Webhook)
+
+### Geri Çağırma (Callback) Açıklaması
+Bir yönetici, tüccar arka ucunda (backend) bir "Risk Kontrolü Geri Çağırma URL'si" yapılandırdığında platform, para çekmenin serbest bırakılıp bırakılmayacağını tüccarın iş tarafına sormak için bir para çekme işlemini işlerken aktif olarak bu URL'ye bir HTTP isteği başlatır.
+**Platform, yalnızca tüccar API'si `code=0` değerini döndürürse fonları serbest bırakacaktır.**
+
+> **⚠️ Not:** Platform, tüccara bağımsız bir **Risk Kontrolü RSA Genel Anahtarı (`PlatformRiskPubKey`)** atayacaktır. Tüccar, bu geri çağırmanın imzasının orijinalliğini doğrulamak için bu genel anahtarı kullanmalıdır.
+
+### Platform Tarafından Başlatılan HTTP İsteği
+* **Yöntem:** `POST`
+* **URL:** Tüccar tarafından yapılandırılmış Webhook URL'si `/withdrawal/order/check`
+
+### Geri Çağırma Parametreleri
+| Parametre Adı | Zorunlu | Tür | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `safeCode` | Hayır | string | Tüccar tarafından gönderilen para çekme siparişi kimliği (`SafeCheckCode`) |
+| `openId` | Evet | string | Para Çeken Kullanıcının Kimliği |
+| `tokenId` | Evet | string | Token Kimliği |
+| `toAddress` | Evet | string | Para Çekme Hedef Adresi |
+| `amount` | Evet | string | Para Çekme Miktarı |
+| `timestamp` | Evet | int | Milisaniye zaman damgası |
+| `sign` | Evet | string | Risk kontrolü özel anahtarı kullanılarak platform tarafından oluşturulan imza |
+
+### Tüccardan Beklenen Yanıt
+İşlemden sonra tüccar API'si aşağıdaki JSON'ı döndürmelidir:
+
+| Parametre Adı | Tür | Açıklama |
+| :--- | :--- | :--- |
+| `code` | int | Doğrulama sonucu. `0`, serbest bırakmayı kabul etmek anlamına gelir; diğer sayılar reddetmek anlamına gelir. |
+| `timestamp` | int | Saniye cinsinden geçerli zaman damgası |
+| `message` | string | Özel açıklama |
+| `sign` | string | Tüccar, kendi RSA özel anahtarını kullanarak yanıt verilerini imzalar |
+
+---
+
+## 7. Para Yatırma ve Para Çekme Geri Çağırma Bildirimi (Webhook)
+
+### Geri Çağırma Açıklaması
+Platform, iş tarafına token işlem durumu (para çekme başarısı/başarısızlığı veya kullanıcı para yatırma kredisi) hakkında eşzamansız bildirimler iletir.
+
+1. **Yeniden Deneme Mekanizması:** İş tarafı, başarılı bir şekilde alınmış sayılması için `0` dönüş koduyla yanıt vermelidir. Aksi takdirde, platform stratejiye göre iletmeyi sürekli olarak yeniden deneyecektir (başlangıçta her 2 saniyede bir 50 kez, ardından her 10 dakikada bir).
+2. **Durum Geçersiz Kılma:** Bir işlem birden fazla bildirimi tetikleyebilir. Lütfen en son duruma güvenin.
+3. **Başarısızlık İşleme:** Para çekme geri çağırması `status = -1` ise, yönetici işlemi arka uçta (backend) yeniden gönderdikten sonra sistem yeni bir durum bildirimini tekrar iletecektir.
+
+### Platform Tarafından Başlatılan HTTP İsteği
+* **Yöntem:** `POST`
+* **URL:** Tüccar tarafından servis sağlayıcıya sağlanan geri çağırma URL'si.
+
+### Geri Çağırma Parametreleri
+| Parametre Adı | Zorunlu | Tür | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `type` | Evet | int | İşletme Türü: Para yatırma için `1`; para çekme için `2`. |
+| `status` | Evet | int | İşlem Durumu:<br/> `1`: Zincir üstü (On-chain) başarılı, karma (hash) üzerinden sorgulanabilir.<br/> `-1`: Zincir üstü başarısız, arka uçta işlenebilir.<br/> `2`: Risk kontrolü tetiklendi, yönetici arka ucunda manuel inceleme gerektiriyor.<br/> `-2`: Para çekme başvurusu tüccar risk kontrol API'si tarafından reddedildi. |
+| `openid` | Evet | string | Kanal Kullanıcısının Benzersiz Kimliği |
+| `totalvalue` | Evet | string | İşlem anındaki piyasa fiyatına göre hesaplanan eşdeğer USDT değeri |
+| `hash` | Evet | string | Zincir Üstü İşlem Karması (Hash) |
+| `confirm` | Evet | int | Zincir Üstü Onay Sayısı |
+| `from` | Evet | string | İşlemi Başlatan Adres |
+| `to` | Evet | string | İşlem Alma Adresi |
+| `amount` | Evet | string | İşlem Tutarı |
+| `chainid` | Evet | string | Zincir Kimliği |
+| `tokenid` | Evet | string | Token Kimliği |
+| `tokenaddress` | Evet | string | Akıllı Sözleşme Adresi |
+| `safecode` | Hayır | string | Para Çekme Siparişi Güvenlik Doğrulama Kodu (OrderID) |
+| `createdtime` | Evet | string | İşlem Oluşturulma Zamanı |
+| `timestamp` | Evet | string | İletme Zaman Damgası |
+
+### Tüccardan Beklenen Yanıt
+Başarıyla alınırsa, lütfen `{"code": 0}` içeren bir JSON yanıt gövdesi döndürün.
+
+---
+
+## 8. Kasa Siparişi Oluştur (new_order)
+
+### API Açıklaması
+Bu arayüz, tüccarlar tarafından ödeme veya yükleme isteklerini başlatmak için kullanılır. Sistem bir ödeme adresi (Kasa URL'si) döndürür ve kullanıcı sonraki ödeme işlemini tamamlamak için bu adresi ziyaret edebilir.
+
+### HTTP İsteği
+* **URL:** `https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder`
+* **Yöntem:** `POST`
+
+### İstek Parametreleri
+| Parametre Adı | Zorunlu mu? | Tür | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `outOrderNo` | Evet | string | Tüccar tarafındaki benzersiz sipariş kimliği (mükerrer gönderimi önlemek ve mutabakat için kullanılır) |
+| `tokenId` | Evet | integer | Belirteç (Token) Kimliği |
+| `quantity` | Evet | decimal | Sipariş tutarı/miktarı |
+| `notifyUrl` | Hayır | string | Başarılı ödemeden sonra asenkron geri çağırma bildirim adresi |
+
+### Yanıt Parametreleri
+*(Global Bilgileri İçerir)*
+| Parametre Adı | Tür | Açıklama |
+| :--- | :--- | :--- |
+| `data.orderNo` | string | Platform tarafından oluşturulan benzersiz sipariş kimliği |
+| `data.outOrderNo` | string | Tüccar tarafından iletilen orijinal sipariş kimliği |
+| `data.cashierUrl` | string | **Temel Alan**: Kasa sayfası adresi. Tüccarların ödeme için kullanıcıları bu bağlantıya yönlendirmesi gerekir. |
+
+### Kod Örneği (cURL)
+```bash
+curl --location 'https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder' \
+--header 'key: your_api_key' \
+--header 'sign: your_md5_sign' \
+--header 'clientSign: your_rsa_sign' \
+--header 'Content-Type: application/json' \
+--header 'timestamp: 1770606706659' \
+--data '{  
+  "outOrderNo": "1234623",   
+  "tokenId": 6,   
+  "quantity": 0.01,   
+  "notifyUrl": "https://your-domain.com/callback"   
+}'
+```
+
+---
+
+## 9. Kasa Siparişi Ödeme Başarısı Geri Çağırma (Webhook)
+
+### Geri Çağırma Açıklaması
+Kullanıcı kasa sayfasında ödemeyi tamamladıktan sonra, DogPay tüccar tarafından sağlanan `notifyUrl` adresine asenkron bir geri çağırma bildirimi gönderecektir.
+
+### Platform Tarafından Başlatılan HTTP İsteği
+* **Yöntem:** `POST`
+* **URL:** Tüccar tarafından sağlanan `notifyUrl`
+
+### Geri Çağırma Parametreleri
+| Parametre Adı | Tür | Açıklama |
+| :--- | :--- | :--- |
+| `orderId` | string | Platform sistem sipariş kimliği |
+| `outOrderId` | string | Tüccar orijinal sipariş kimliği |
+| `orderStatus` | string | **Sipariş Durumu**: 2 genellikle Başarılı Ödemeyi temsil eder |
+| `tokenId` | string | Belirteç Kimliği |
+| `quantityPaid` | string | **Kullanıcı tarafından ödenen gerçek miktar** |
+| `sign` | string | **Veri İmzası** (sahte geri çağırmaları önlemek için tüccar doğrulaması için kullanılır) |
+
+### Tüccardan Beklenen Yanıt
+Başarıyla alınırsa, lütfen aşağıdaki JSON'u döndürün:
 ```json
 {
-    "sign": "D+VTPNiwGLzh9eIvkrscwS4UlGKzdnrBgB63RDG4HeobZT6FXqUwYCPgKojynKaxwm5PkmW0xhIASZ4asSCvnYfi0NSFehchZAtUnQIispxKcjsiudWsUznbkEIQ2h2TA/mbUZ1X9+wyh7QhNo6+RkxtgRyRpVb7ARG8pL14cdTAs OTtMLO0W1GO0M83VAv2ybBZNObncX9qy6tdwLQV/KYuNJYyMN0dL0nLKYHnj9Q4d3lEDM45AVJ0153/YIiIgcF BnOWhsQ9rVARcFeXeWd9KJ5OZpmxlxnhcJGcEUY2UDC4zKLZxtUet7CPAyehAMQ5plkpvRrR3Z6lA5zl6GQ==",
-    "timestamp": "1725439986754",
-    "data": "94f4c29eba73d53dcd3aa1b8cf90a98108d0acf82f38b97a4032dcdf7ff172e7",
-    "msg": "ok",
-    "code": 1
+  "code": "1",
+  "message": "success"
 }
 ```
 
-## Para Çekme Siparişi İkincil İnceleme 💳
+---
 
-* İşlev: Tüccar para çekme siparişi risk kontrolü ikincil inceleme arayüzü
-* ⚠️ Not: **Platform, tüccarlara ayrı bir risk kontrol RSA genel anahtarı atar (para yatırma/çekme geri çağrı bildirim genel anahtarından farklı)**
-* Tetikleme Zamanı: Yönetici, tüccar tarafında risk kontrol geri çağrı URL parametrelerini yapılandırdıktan sonra (sistem ayarları), kanal her para çekme işlem isteği için ek bir risk kontrol geri çağrı ikincil incelemesi ekler. Yalnızca tüccar tarafı risk kontrol URL'si doğru bir doğrulama geçme kodu döndürdüğünde işlem geçerli bir şekilde gönderilir.
-* Teknik Gereksinimler: Tüccar tarafı teknik uygulama ve ikincil inceleme geri çağrı arayüzünün yapılandırılması gereklidir.
+## 10. Cüzdan Bakiyesini Sorgula (wallet_balance)
 
-#### HTTP İsteği
+### API Açıklaması
+Belirtilen blokzincir ağındaki belirli bir cüzdan adresinin belirteç veya yerel coin bakiyesini sorgular.
 
-Platform, tüccara para çekme incelemesi isteği gönderir
-
-> POST: `/withdrawal/order/check`
-
-#### İstek Parametreleri
-
-| Parametre Adı | Zorunlu | Tür    | Açıklama                                                                                                                                                    |
-| :------------ | :------ | :----- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| safeCode      | Hayır   | string | Tüccar tarafından gönderilen benzersiz işlem ID'si, genellikle tüccarın para çekme sipariş ID'sine karşılık gelir (para çekme işlemleri için SafeCheckCode) |
-| openId        | Evet    | string | Para çekme işlemını gönderen tüccar kullanıcı ID'si                                                                                                         |
-| tokenId       | Evet    | string | Para birimi ID'si, platform tarafından sağlanan para birimi ID'sine dayanır                                                                                 |
-| toAddress     | Evet    | string | Para çekme adresi                                                                                                                                           |
-| amount        | Evet    | string | Para çekme miktarı                                                                                                                                          |
-| timestamp     | Evet    | int    | Mevcut zaman damgası                                                                                                                                        |
-| sign          | Evet    | string | İmza: Yalnızca data alanındaki parametreler imzalanır; imzanın doğruluğu platformun risk kontrol RSA genel anahtarı kullanılarak doğrulanmalıdır.           |
-
-#### Dönüş Parametre Açıklama
-
-| Parametre Adı | Tür    | Açıklama                                                                       |
-| :------------ | :----- | :----------------------------------------------------------------------------- |
-| code          | int    | Doğrulama sonucu. 0 geçerli olduğunu belirtir; diğer kodlar geçersizdir.       |
-| timestamp     | int    | Mevcut zaman damgası, saniye cinsinden.                                        |
-| message       | string | Dönüş mesajı.                                                                  |
-| sign          | string | İmza: Yanıt parametresindeki data alanı için tüccarın RSA özel anahtar imzası. |
-
-## Para Yatırma ve Çekme Geri Çağrı Bildirimleri
-
-1. Para yatırma ve çekme işlemleri birden fazla geri çağrı bildirimini tetikler. Son geri çağrı bildiriminin işlem bilgileri ve durumu kullanılır.
-2. İş tarafı geçerli bir geri çağrı mesajı döndürmelidir. Biçim dönüş parametre açıklamasında belirtilmiştir. 0 dönüş kodu, geri çağrı mesajının işlendiğini ve daha fazla bildirim gerekmediğini belirtir. Aksi takdirde, geri çağrı devam eder (başlangıçta her 2 saniyede 50 kez, ardından her 10 dakikada bir) ta ki code 0 ile doğrulama mesajı döndürülene kadar.
-
-Geri çağrı URL'sini ayarlamak için hizmet sağlayıcısıyla iletişime geçin.
-
-> POST
-
-* İşlev: Platformun, uygulama tarafına token işlem bilgilerini (kullanıcı para çekme veya yatırma) bildirmek için kullandığı geri çağrı mesaj formatını tanımlar. Bu mesaj, uygulama tarafı token işlem durumu (çekme veya yatırma) olay bildirimleri için uygundur. Uygulamalar, uygulama işlevlerine göre geri çağrı bildirim arayüzünü isteğe bağlı olarak destekleyebilir.
+### HTTP İsteği
+* **URL:** `https://sandbox-api.privatex.io/sdk/wallet/balance`
+* **Yöntem:** `POST`
 
 ### İstek Parametreleri
+| Parametre Adı | Zorunlu | Tür | Açıklama |
+| :--- | :--- | :--- | :--- |
+| `address` | Evet | string | Cüzdan adresi |
+| `contractAddress` | Evet | string | Sözleşme adresi veya belirteç sembolü (örn. `"XRP"`, `"USDT"`) |
+| `chainId` | Evet | integer | Zincir Kimliği (örn. XRP için `5`, Ethereum için `1`, BNB Chain için `56`) |
 
-| Parametre Adı | Zorunlu | Tür    | Açıklama                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| :------------ | :------ | :----- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| openid        | evet    | string | Kanal kullanıcı benzersiz ID'si                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| totalvalue    | evet    | string | Para yatırma veya çekme işlemine karşılık gelen USDT değeri (işlem zamanındaki piyasa fiyatına göre hesaplanır)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| status        | evet    | int    | İşlem durumu:</br>1 İşlem tamamlandı ve başarıyla blockchain ağına gönderildi. İşlem detayları hash kullanılarak zincirde sorgulanabilir.</br>-1 İşlem blockchain ağına gönderildi, ancak zincirdeki işlem başarısız oldu. Tüccar Yönetimi --> İşlem Yönetimi --> [Sipariş Güvenlik Kodunu Gönder] altında tekrar inceleyebilirsiniz. İş platformu durum değişikliğini işlemeye gerek yoktur ve kanalın yeni durum bildirimini geri çağrı yapmasını bekleyebilir.</br>-2 Para çekme işlem başvurusu tüccar arka ucu tarafından reddedildi. Para çekme başvurusu süresi doldu. İş platformunun bildirim aldıktan sonra kullanıcının para çekme başvurusunu iade etmesi önerilir.</br>2 Para çekme işlemi tüccar yönetimine gönderildi. Yapılandırılan para birimi güvenlik risk kontrol gereksinimlerini tetiklediği için, yönetici Tüccar Yönetimi --> İşlem Yönetimi --> Para Çekme İncelemesi'nde para çekme başvuru işlemini tamamlamalıdır.</br>3 Para çekme işlemi blockchain işleme sırasında, iş platformu durum değişikliğini güncellemeye gerek yoktur ve kanalın yeni durum bildirimini almasını bekleyebilir. </br>⛑️**Özel Hatırlatma: İş platformu tarafından alınan para çekme işlem geri çağrıları için, eğer status = -1 ise, geri çağrı yoksayılır. Yönetici yönetim arka ucuna giriş yaptıktan ve işlemi tekrar gönderdikten sonra, yeni durum bildirimi platforma aynı anda itilir.** |  | type | evet | int | 1 para yatırma işlemleri için; 2 para çekme işlemleri için |
-| hash          | evet    | string | İşlem hash değeri                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| confirm       | evet    | int    | İşlemin zincirdeki onay sayısı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| createdtime   | evet    | string | Oluşturma zamanı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| from          | evet    | string | İşlem başlatıcısının adresi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| to            | evet    | string | İşlem alıcı adresi                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+### Yanıt Parametreleri
+*(Genel Bilgileri İçerir)*
+| Parametre Adı | Tür | Açıklama |
+| :--- | :--- | :--- |
+| `code` | integer | Genel durum kodu (`1` başarıyı temsil eder) |
+| `msg` | string | Durum açıklaması |
+| `data` | string | Belirteç / coin bakiye miktarı (en küçük birimlerde dize) |
+| `timestamp` | string | Yanıt zaman damgası (milisaniye) |
+| `sign` | string | Platform veri imzası |
+
+### Örnek Kod (cURL)
+```bash
+curl --location --request POST 'https://sandbox-api.privatex.io/sdk/wallet/balance' \
+--header 'key: your_api_key' \
+--header 'sign: your_md5_sign' \
+--header 'Content-Type: application/json' \
+--header 'timestamp: 1725076567682' \
+--data-raw '{
+  "address":"rXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "contractAddress":"XRP",
+  "chainId":5
+}'
+```
+
+### Yanıt Örneği
+```json
+{
+  "sign" : "",
+  "timestamp" : "1725432397796",
+  "data" : "1979984",
+  "msg" : "ok",
+  "code" : 1
+}
+```
