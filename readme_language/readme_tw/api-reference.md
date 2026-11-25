@@ -272,7 +272,7 @@ curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenI
 ## 8. 創建收銀台訂單 (new_order)
 
 ### 接口說明
-該接口用於商戶發起支付或充值請求，系統會返回一個支付地址（收銀台 URL），用戶訪問該地址即可完成後續支付流程。
+該接口用於商戶發起支付或充值請求，系統會返回收款地址和收銀台頁面鏈接（Cashier URL），用戶訪問該地址即可完成後續支付流程。
 
 ### HTTP 請求
 * **URL:** `https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder`
@@ -281,10 +281,16 @@ curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenI
 ### 請求參數
 | 參數名稱 | 必填 | 類型 | 說明 |
 | :--- | :--- | :--- | :--- |
-| `outOrderNo` | 是 | string | 商戶側唯一訂單號，用於防止重複提交及對賬 |
-| `tokenId` | 是 | integer | 幣種 ID |
-| `quantity` | 是 | decimal | 訂單金額/數量 |
-| `notifyUrl` | 否 | string | 支付成功後的異步回調通知地址 |
+| `outOrderNo` | 是 | string | 商戶側唯一訂單號，全平台唯一，用於防止重複提交及對賬（建議帶商戶前綴） |
+| `outUserId` | 視模式 | string | 商戶側用戶 ID。**未開啟地址池模式時必填**（否則返回 `10502` 參數錯誤）；已開啟地址池模式（`address_reuse_mode=1`）時可不傳 |
+| `tokenId` | 是 | integer | 幣種 ID（同時決定鏈） |
+| `quantity` | 是 | decimal | 應付數量（幣的數量，必須 `> 0`；建議用普通小數寫法如 `0.01`，不要用科學計數法） |
+| `notifyUrl` | 否 | string | 支付完成後的異步回調通知地址（不傳時回調至商戶後台配置的默認回調地址） |
+| `orderDetail` | 否 | string | 訂單描述，原樣保存 |
+
+> **兩種地址模式說明（`outUserId`）：**
+> * **固定地址模式：** 傳入 `outUserId`（無論商戶是否開啟地址池），按 `(商戶, outUserId, 鏈)` 分配固定地址。未開啟地址池模式的商戶**必須**傳 `outUserId`，否則返回 `10502`。
+> * **地址池模式：** 不傳 `outUserId`（須省略該字段，不能傳空串）且商戶開啟了地址復用 `address_reuse_mode=1`，從空閒地址池分配獨佔地址。注意：此模式下響應和回調中的 `outUserId` 為該池地址原綁定用戶 ID，對賬請使用 `outOrderNo` / `orderNo`（回調為 `outOrderId` / `orderId`）。
 
 ### 響應參數
 *(包含公共信息)*
@@ -292,50 +298,68 @@ curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenI
 | :--- | :--- | :--- |
 | `data.orderNo` | string | 平台生成的唯一訂單號 |
 | `data.outOrderNo` | string | 商戶傳入的原始訂單號 |
+| `data.outUserId` | string | 訂單綁定的用戶 ID（地址池模式下為池地址原綁定用戶 ID） |
+| `data.tokenId` | integer | 幣種 ID |
+| `data.quantity` | string | 應付數量（JSON 中為字符串） |
+| `data.addresses` | string | 收款地址（單個地址，區分大小寫，請原樣展示） |
 | `data.cashierUrl` | string | **核心字段**：收銀台頁面地址，商戶需引導用戶跳轉至該鏈接進行支付 |
 
 ### 示例代碼 (cURL)
 ```bash
 curl --location 'https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder' \
 --header 'key: your_api_key' \
---header 'sign: your_md5_sign' \
---header 'clientSign: your_rsa_sign' \
+--header 'sign: 1b5b885633560f447f38073f964ad51b' \
+--header 'clientSign: your_rsa_sign_base64' \
 --header 'Content-Type: application/json' \
 --header 'timestamp: 1770606706659' \
---data '{  
-  "outOrderNo": "1234623",   
-  "tokenId": 6,   
-  "quantity": 0.01,   
-  "notifyUrl": "https://your-domain.com/callback"   
+--data '{
+  "outOrderNo": "1234623",
+  "outUserId": "user_10086",
+  "tokenId": 6,
+  "quantity": 0.01,
+  "notifyUrl": "https://your-domain.com/callback",
+  "orderDetail": "VIP会员充值"
 }'
 ```
+
+*(若商戶已開啟地址池模式，可省略 `outUserId` 和 `orderDetail` 字段，且未傳字段不參與簽名。)*
 
 ---
 
 ## 9. 收銀台訂單支付成功回調 (Webhook)
 
 ### 回調說明
-當用戶在收銀台完成支付後，DogPay 會向商戶提供的 `notifyUrl` 發送異步回調通知。
+當用戶在收銀台完成全額支付（`orderStatus=2`）後，DogPay 會向訂單指定的 `notifyUrl`（未傳時使用商戶後台默認回調地址）發送異步回調通知。部分付款（`1`）和過期（`-1`）不會觸發回調。
 
 ### 平台發起的 HTTP 請求
 * **方法:** `POST`
-* **URL:** 商戶提供的 `notifyUrl`
+* **URL:** 商戶提供的 `notifyUrl`（或默認回調地址）
 
 ### 回調參數
 | 參數名稱 | 類型 | 說明 |
 | :--- | :--- | :--- |
-| `orderId` | string | 平台系統訂單號 |
-| `outOrderId` | string | 商戶原始訂單號 |
-| `orderStatus` | string | **訂單狀態**：2 通常代表支付成功 |
+| `orderId` | string | 平台系統訂單號（對應下單返回的 `orderNo`） |
+| `outOrderId` | string | 商戶原始訂單號（對應下單時的 `outOrderNo`） |
+| `outUserId` | string | 訂單綁定用戶 ID（地址池模式下為池地址原綁定用戶 ID） |
+| `orderType` | string | 訂單類型（`1` = 充值代收） |
+| `chainId` | string | 鏈 ID |
 | `tokenId` | string | 幣種 ID |
-| `quantityPaid` | string | **用戶實付數量** |
-| `sign` | string | **數據簽名**（用於商戶驗簽，防止回調被偽造） |
+| `quantity` | string | 應付數量 |
+| `quantityPaid` | string | **用戶實付累計數量** |
+| `totalAmount` | string | 應付 USD 估值 |
+| `totalAmountPaid` | string | 實付 USD 估值 |
+| `exchangeAddress` | string | 收款地址 |
+| `orderStatus` | string | **訂單狀態**：回調時固定為 `2`（已完成） |
+| `txHash` | string | 最後一筆匹配到該訂單的鏈上交易哈希 |
+| `createdAt` | string | 訂單創建時間 |
+| `timestamp` | string | 回調發送時間戳（毫秒） |
+| `sign` | string | **數據簽名**（用於商戶使用平台公鑰驗簽，防止回調被偽造） |
 
 ### 業務端（商戶）需響應內容
-接收成功請返回如下 JSON：
+接收成功請返回如下 JSON（`code` 為 `"0"` 或數字 `0` 即視為成功，否則平台會繼續重試）：
 ```json
 {
-  "code": "1",
+  "code": "0",
   "message": "success"
 }
 ```

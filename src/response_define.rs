@@ -139,6 +139,8 @@ pub struct RequestCashierCb {
     pub total_amount_paid: String,
     #[serde(rename = "outUserId")]
     pub out_user_id: String,
+    #[serde(rename = "txHash", default)]
+    pub tx_hash: String,
     #[serde(rename = "createdAt")]
     pub created_at: String,
     pub timestamp: String,

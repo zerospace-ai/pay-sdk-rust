@@ -272,7 +272,7 @@ Si se recibe con éxito, devuelva un cuerpo de respuesta JSON que contenga `{"co
 ## 8. Crear orden de caja (new_order)
 
 ### Descripción de la API
-Esta interfaz es utilizada por los comerciantes para iniciar solicitudes de pago o recarga. El sistema devolverá una dirección de pago (URL de caja) y el usuario puede visitar esta dirección para completar el proceso de pago posterior.
+Esta interfaz permite a los comerciantes iniciar solicitudes de pago o recarga. El sistema devuelve una dirección de cobro y un enlace a la página de caja (Cashier URL) para que el usuario complete el pago.
 
 ### Solicitud HTTP
 * **URL:** `https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder`
@@ -281,61 +281,85 @@ Esta interfaz es utilizada por los comerciantes para iniciar solicitudes de pago
 ### Parámetros de solicitud
 | Nombre del parámetro | Requerido | Tipo | Descripción |
 | :--- | :--- | :--- | :--- |
-| `outOrderNo` | Sí | string | ID de pedido único en el lado del comerciante (utilizado para evitar envíos duplicados y para conciliación) |
-| `tokenId` | Sí | integer | ID de token |
-| `quantity` | Sí | decimal | Monto/cantidad del pedido |
-| `notifyUrl` | No | string | Dirección de notificación de callback asíncrono después de un pago exitoso |
+| `outOrderNo` | Sí | string | ID de pedido único del comerciante (único en toda la plataforma; se recomienda añadir un prefijo del comerciante) |
+| `outUserId` | Según modo | string | ID de usuario del comerciante. **Obligatorio si el modo de pool de direcciones no está habilitado** (de lo contrario devuelve `10502`); omitir en modo de pool de direcciones (`address_reuse_mode=1`) |
+| `tokenId` | Sí | integer | ID de token (también determina la red blockchain) |
+| `quantity` | Sí | decimal | Cantidad de token a pagar (debe ser `> 0`; use notación decimal simple como `0.01`, evite notación científica) |
+| `notifyUrl` | No | string | Dirección de notificación asíncrona tras el pago completo (si se omite, se usa la URL predeterminada configurada en el panel) |
+| `orderDetail` | No | string | Descripción del pedido (se guarda tal cual) |
+
+> **Modos de dirección (`outUserId`):**
+> * **Modo de dirección fija:** Al pasar `outUserId` se asigna una dirección fija por `(comerciante, outUserId, cadena)`. Los comerciantes sin pool de direcciones **deben** pasar `outUserId`, de lo contrario recibirán el error `10502`.
+> * **Modo de pool de direcciones:** Al omitir `outUserId` (debe omitirse/`null`, no cadena vacía) con `address_reuse_mode=1` activado, se asigna una dirección exclusiva libre del pool. Nota: en este modo, `data.outUserId` y `outUserId` en el callback corresponden al usuario originalmente vinculado a esa dirección — concilie siempre usando `outOrderNo` / `orderNo` (`outOrderId` / `orderId`).
 
 ### Parámetros de respuesta
 *(Incluye información global)*
 | Nombre del parámetro | Tipo | Descripción |
 | :--- | :--- | :--- |
 | `data.orderNo` | string | ID de pedido único generado por la plataforma |
-| `data.outOrderNo` | string | ID de pedido original pasado por el comerciante |
-| `data.cashierUrl` | string | **Campo central**: Dirección de la página de caja. Los comerciantes deben guiar a los usuarios a este enlace para el pago. |
+| `data.outOrderNo` | string | ID de pedido original enviado por el comerciante |
+| `data.outUserId` | string | ID de usuario vinculado (en modo pool, el usuario original de la dirección del pool) |
+| `data.tokenId` | integer | ID de token |
+| `data.quantity` | string | Cantidad a pagar (cadena en JSON) |
+| `data.addresses` | string | Dirección de cobro (única dirección; distingue mayúsculas y minúsculas) |
+| `data.cashierUrl` | string | **Campo central**: Dirección de la página de caja; los comerciantes deben redirigir al usuario a este enlace |
 
 ### Ejemplo de código (cURL)
 ```bash
 curl --location 'https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder' \
 --header 'key: your_api_key' \
---header 'sign: your_md5_sign' \
---header 'clientSign: your_rsa_sign' \
+--header 'sign: 1b5b885633560f447f38073f964ad51b' \
+--header 'clientSign: your_rsa_sign_base64' \
 --header 'Content-Type: application/json' \
 --header 'timestamp: 1770606706659' \
---data '{  
-  "outOrderNo": "1234623",   
-  "tokenId": 6,   
-  "quantity": 0.01,   
-  "notifyUrl": "https://your-domain.com/callback"   
+--data '{
+  "outOrderNo": "1234623",
+  "outUserId": "user_10086",
+  "tokenId": 6,
+  "quantity": 0.01,
+  "notifyUrl": "https://your-domain.com/callback",
+  "orderDetail": "VIP会员充值"
 }'
 ```
+
+*(En modo de pool de direcciones, `outUserId` y `orderDetail` pueden omitirse; los campos omitidos no participan en la firma.)*
 
 ---
 
 ## 9. Callback de éxito de pago de orden de caja (Webhook)
 
 ### Descripción del callback
-Después de que el usuario completa el pago en la página de caja, DogPay enviará una notificación de callback asíncrona a la `notifyUrl` proporcionada por el comerciante.
+Solo cuando el pedido se paga en su totalidad (`orderStatus=2`), DogPay envía una notificación asíncrona a la `notifyUrl` indicada (o a la URL de callback predeterminada del comerciante). Los pagos parciales (`1`) y los pedidos expirados (`-1`) no disparan callbacks.
 
 ### Solicitud HTTP iniciada por la plataforma
 * **Método:** `POST`
-* **URL:** `notifyUrl` proporcionada por el comerciante
+* **URL:** `notifyUrl` proporcionada por el comerciante (o URL de callback predeterminada)
 
 ### Parámetros del callback
 | Nombre del parámetro | Tipo | Descripción |
 | :--- | :--- | :--- |
-| `orderId` | string | ID de pedido del sistema de la plataforma |
-| `outOrderId` | string | ID de pedido original del comerciante |
-| `orderStatus` | string | **Estado del pedido**: 2 generalmente representa pago exitoso |
+| `orderId` | string | ID de pedido de la plataforma (coincide con `data.orderNo`) |
+| `outOrderId` | string | ID de pedido original del comerciante (coincide con `outOrderNo`) |
+| `outUserId` | string | ID de usuario vinculado (ver nota sobre modos de dirección) |
+| `orderType` | string | Tipo de pedido (`1` = depósito/cobro) |
+| `chainId` | string | ID de cadena |
 | `tokenId` | string | ID de token |
-| `quantityPaid` | string | **Cantidad real pagada por el usuario** |
-| `sign` | string | **Firma de datos** (utilizada para la verificación del comerciante para evitar callbacks falsificados) |
+| `quantity` | string | Cantidad a pagar |
+| `quantityPaid` | string | **Cantidad acumulada realmente pagada por el usuario** |
+| `totalAmount` | string | Valor estimado a pagar en USD |
+| `totalAmountPaid` | string | Valor estimado realmente pagado en USD |
+| `exchangeAddress` | string | Dirección de cobro |
+| `orderStatus` | string | **Estado del pedido**: fijo en `2` (completado) en el callback |
+| `txHash` | string | Hash de la última transacción on-chain asociada al pedido |
+| `createdAt` | string | Fecha de creación del pedido |
+| `timestamp` | string | Marca de tiempo de envío del callback (milisegundos) |
+| `sign` | string | **Firma de datos** (verificar con la clave pública de la plataforma) |
 
 ### Respuesta esperada del comerciante
-Si se recibe correctamente, devuelva el siguiente JSON:
+Si se recibe correctamente, devuelva el siguiente JSON (`code` debe ser `"0"` o `0`; cualquier otra respuesta provocará reintentos):
 ```json
 {
-  "code": "1",
+  "code": "0",
   "message": "success"
 }
 ```

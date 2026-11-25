@@ -272,7 +272,7 @@ curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenI
 ## 8. 카셔 주문 생성 (new_order)
 
 ### API 설명
-이 인터페이스는 가맹점이 결제 또는 충전 요청을 시작하는 데 사용됩니다. 시스템은 결제 주소(카셔 URL)를 반환하며, 사용자는 이 주소를 방문하여 후속 결제 프로세스를 완료할 수 있습니다.
+이 인터페이스는 가맹점이 결제 또는 충전 요청을 시작하는 데 사용됩니다. 시스템은 입금 주소와 결제 페이지 링크(Cashier URL)를 반환하며, 사용자는 이 링크로 이동하여 결제를 완료할 수 있습니다.
 
 ### HTTP 요청
 * **URL:** `https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder`
@@ -281,10 +281,16 @@ curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenI
 ### 요청 매개변수
 | 매개변수 이름 | 필수 여부 | 유형 | 설명 |
 | :--- | :--- | :--- | :--- |
-| `outOrderNo` | 예 | string | 가맹점 측의 고유 주문 번호(중복 제출 방지 및 대조용) |
-| `tokenId` | 예 | integer | 토큰 ID |
-| `quantity` | 예 | decimal | 주문 금액/수량 |
-| `notifyUrl` | 아니요 | string | 결제 성공 후의 비동기 콜백 알림 주소 |
+| `outOrderNo` | 예 | string | 가맹점 측 고유 주문 번호 (전체 플랫폼 고유, 중복 방지를 위해 가맹점 접두사 권장) |
+| `outUserId` | 모드에 따름 | string | 가맹점 측 사용자 ID. **주소 풀 모드가 비활성화된 경우 필수**(미전달 시 `10502` 오류); 주소 풀 모드(`address_reuse_mode=1`)에서는 생략 가능 |
+| `tokenId` | 예 | integer | 토큰 ID (체인도 함께 결정됨) |
+| `quantity` | 예 | decimal | 결제 수량 (`> 0` 필수; `0.01`과 같은 일반 소수 표기 권장, 과학적 표기법 금지) |
+| `notifyUrl` | 아니요 | string | 결제 완료 후 비동기 콜백 알림 URL (생략 시 가맹점 관리자 기본 콜백 URL 사용) |
+| `orderDetail` | 아니요 | string | 주문 설명 (원본 그대로 저장) |
+
+> **두 가지 주소 모드 안내 (`outUserId`):**
+> * **고정 주소 모드:** `outUserId`를 전달하면 `(가맹점, outUserId, 체인)`별로 고정 주소가 할당됩니다. 주소 풀 모드가 비활성화된 가맹점은 **반드시** `outUserId`를 전달해야 하며, 미전달 시 `10502`가 반환됩니다.
+> * **주소 풀 모드:** 주소 재사용(`address_reuse_mode=1`)이 활성화된 상태에서 `outUserId`를 생략(빈 문자열이 아닌 필드 자체 생략)하면 유휴 풀에서 전용 주소가 할당됩니다. 이 모드에서 응답 및 콜백의 `outUserId`는 해당 풀 주소의 원래 바인딩 사용자 ID이므로, 정산/대조는 반드시 `outOrderNo` / `orderNo` (콜백에서는 `outOrderId` / `orderId`)를 사용하세요.
 
 ### 응답 매개변수
 *(전역 정보 포함)*
@@ -292,50 +298,68 @@ curl --location 'https://sandbox-api.privatex.io/sdk/partner/UserWithdrawByOpenI
 | :--- | :--- | :--- |
 | `data.orderNo` | string | 플랫폼에서 생성한 고유 주문 ID |
 | `data.outOrderNo` | string | 가맹점에서 전달한 원래 주문 ID |
-| `data.cashierUrl` | string | **핵심 필드**: 카셔 페이지 주소. 가맹점은 사용자를 이 링크로 안내하여 결제해야 합니다. |
+| `data.outUserId` | string | 주문에 바인딩된 사용자 ID (주소 풀 모드에서는 풀 주소의 원래 바인딩 사용자 ID) |
+| `data.tokenId` | integer | 토큰 ID |
+| `data.quantity` | string | 결제 수량 (JSON 문자열) |
+| `data.addresses` | string | 입금 수취 주소 (단일 주소, 대소문자 구분하므로 원본 그대로 표시) |
+| `data.cashierUrl` | string | **핵심 필드**: 카셔 페이지 주소. 가맹점은 사용자를 이 링크로 안내하여 결제해야 합니다 |
 
 ### 코드 예시 (cURL)
 ```bash
 curl --location 'https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder' \
 --header 'key: your_api_key' \
---header 'sign: your_md5_sign' \
---header 'clientSign: your_rsa_sign' \
+--header 'sign: 1b5b885633560f447f38073f964ad51b' \
+--header 'clientSign: your_rsa_sign_base64' \
 --header 'Content-Type: application/json' \
 --header 'timestamp: 1770606706659' \
---data '{  
-  "outOrderNo": "1234623",   
-  "tokenId": 6,   
-  "quantity": 0.01,   
-  "notifyUrl": "https://your-domain.com/callback"   
+--data '{
+  "outOrderNo": "1234623",
+  "outUserId": "user_10086",
+  "tokenId": 6,
+  "quantity": 0.01,
+  "notifyUrl": "https://your-domain.com/callback",
+  "orderDetail": "VIP会员充值"
 }'
 ```
+
+*(주소 풀 모드가 활성화된 경우 `outUserId`와 `orderDetail`을 생략할 수 있으며, 생략된 필드는 서명에 포함되지 않습니다.)*
 
 ---
 
 ## 9. 카셔 주문 결제 성공 콜백 (Webhook)
 
 ### 콜백 설명
-사용자가 카셔 페이지에서 결제를 완료하면 DogPay는 가맹점에서 제공한 `notifyUrl`로 비동기 콜백 알림을 보냅니다.
+사용자가 전액 결제를 완료한 경우(`orderStatus=2`)에만 DogPay가 주문의 `notifyUrl`(미전달 시 기본 콜백 URL)로 비동기 콜백 알림을 전송합니다. 부분 결제(`1`) 및 만료(`-1`) 시에는 콜백이 전송되지 않습니다.
 
 ### 플랫폼에서 시작하는 HTTP 요청
 * **메서드:** `POST`
-* **URL:** 가맹점에서 제공한 `notifyUrl`
+* **URL:** 가맹점에서 제공한 `notifyUrl` (또는 기본 콜백 URL)
 
 ### 콜백 매개변수
 | 매개변수 이름 | 유형 | 설명 |
 | :--- | :--- | :--- |
-| `orderId` | string | 플랫폼 시스템 주문 ID |
-| `outOrderId` | string | 가맹점 원래 주문 ID |
-| `orderStatus` | string | **주문 상태**: 2는 일반적으로 결제 성공을 나타냄 |
+| `orderId` | string | 플랫폼 시스템 주문 ID (`data.orderNo`와 동일) |
+| `outOrderId` | string | 가맹점 원래 주문 ID (`outOrderNo`와 동일) |
+| `outUserId` | string | 주문 바인딩 사용자 ID (위 주소 모드 안내 참고) |
+| `orderType` | string | 주문 유형 (`1` = 충전/수납) |
+| `chainId` | string | 체인 ID |
 | `tokenId` | string | 토큰 ID |
-| `quantityPaid` | string | **사용자가 실제로 결제한 수량** |
-| `sign` | string | **데이터 서명**(콜백 위조 방지를 위한 가맹점 검증에 사용) |
+| `quantity` | string | 결제 예정 수량 |
+| `quantityPaid` | string | **사용자가 실제로 결제한 누적 수량** |
+| `totalAmount` | string | 결제 예정 USD 환산 금액 |
+| `totalAmountPaid` | string | 실결제 USD 환산 금액 |
+| `exchangeAddress` | string | 입금 수취 주소 |
+| `orderStatus` | string | **주문 상태**: 콜백 시 `2`(완료)로 고정 |
+| `txHash` | string | 해당 주문과 매칭된 마지막 온체인 트랜잭션 해시 |
+| `createdAt` | string | 주문 생성 시간 |
+| `timestamp` | string | 콜백 전송 타임스탬프 (밀리초) |
+| `sign` | string | **데이터 서명** (위조 방지를 위해 플랫폼 공개 키로 검증) |
 
 ### 가맹점의 예상 응답
-성공적으로 수신된 경우 다음 JSON을 반환하십시오.
+성공적으로 수신한 경우 다음 JSON을 반환하십시오 (`code`가 `"0"` 또는 숫자 `0`이어야 성공으로 처리되며, 그 외 응답은 재시도됩니다):
 ```json
 {
-  "code": "1",
+  "code": "0",
   "message": "success"
 }
 ```

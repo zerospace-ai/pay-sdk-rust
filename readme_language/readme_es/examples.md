@@ -113,7 +113,7 @@ Antes de ejecutar las herramientas, asegúrese de que el archivo configurado `co
 2. Ejecute `cargo run --example user_withdraw_by_open_id`.
 
 #### Crear orden de caja
-1. Especifique `OutOrderNo`, `TokenId`, `Quantity` y `NotifyUrl` en `config.yaml`.
+1. Especifique `OutOrderNo`, `OutUserId` (obligatorio en modo de dirección fija), `TokenId`, `Quantity`, `NotifyUrl` y `OrderDetail` en `config.yaml`.
 2. Ejecute `cargo run --example new_order`.
 
 #### Consultar Saldo de Billetera

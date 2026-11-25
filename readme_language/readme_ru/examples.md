@@ -113,7 +113,7 @@ SDK предоставляет бинарные файлы интерфейса 
 2. Запустите `cargo run --example user_withdraw_by_open_id`.
 
 #### Создание кассового ордера
-1. Укажите `OutOrderNo`, `TokenId`, `Quantity` и `NotifyUrl` в `config.yaml`.
+1. Укажите `OutOrderNo`, `OutUserId` (обязательно в режиме фиксированного адреса), `TokenId`, `Quantity`, `NotifyUrl` и `OrderDetail` в `config.yaml`.
 2. Запустите `cargo run --example new_order`.
 
 #### Запрос баланса кошелька

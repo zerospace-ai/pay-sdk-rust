@@ -272,7 +272,7 @@ Wenn erfolgreich empfangen, geben Sie bitte einen JSON-Antwortkörper zurück, d
 ## 8. Kassenbestellung erstellen (new_order)
 
 ### API-Beschreibung
-Diese Schnittstelle wird von Händlern verwendet, um Zahlungs- oder Aufladeanfragen zu initiieren. Das System gibt eine Zahlungsadresse (Cashier-URL) zurück, die der Benutzer besuchen kann, um den nachfolgenden Zahlungsvorgang abzuschließen.
+Diese Schnittstelle wird von Händlern verwendet, um Zahlungs- oder Aufladeanfragen zu initiieren. Das System gibt eine Empfangsadresse sowie einen Zahlungsseiten-Link (Cashier-URL) zurück, über den der Benutzer die Zahlung abschließen kann.
 
 ### HTTP-Anfrage
 * **URL:** `https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder`
@@ -281,10 +281,16 @@ Diese Schnittstelle wird von Händlern verwendet, um Zahlungs- oder Aufladeanfra
 ### Anfrageparameter
 | Parametername | Erforderlich | Typ | Beschreibung |
 | :--- | :--- | :--- | :--- |
-| `outOrderNo` | Ja | string | Eindeutige Bestellnummer auf der Händlerseite (zur Vermeidung von Doppelübermittlungen und zum Abgleich) |
-| `tokenId` | Ja | integer | Token-ID |
-| `quantity` | Ja | decimal | Bestellbetrag/-menge |
-| `notifyUrl` | Nein | string | Asynchrone Callback-Benachrichtigungsadresse nach erfolgreicher Zahlung |
+| `outOrderNo` | Ja | string | Eindeutige Bestellnummer auf der Händlerseite (plattformweit eindeutig; Händlerpräfix empfohlen) |
+| `outUserId` | Modusabhängig | string | Benutzer-ID auf Händlerseite. **Erforderlich, wenn der Adresspool-Modus nicht aktiviert ist** (sonst Fehler `10502`); im Adresspool-Modus (`address_reuse_mode=1`) weglassen |
+| `tokenId` | Ja | integer | Token-ID (bestimmt zugleich das Blockchain-Netzwerk) |
+| `quantity` | Ja | decimal | Zu zahlende Token-Menge (muss `> 0` sein; normale Dezimalschreibweise wie `0.01` verwenden, keine wissenschaftliche Notation) |
+| `notifyUrl` | Nein | string | Asynchrone Callback-Benachrichtigungsadresse nach vollständiger Zahlung (bei Weglassen wird die Standard-Callback-URL im Händler-Backend verwendet) |
+| `orderDetail` | Nein | string | Bestellbeschreibung (wird unverändert gespeichert) |
+
+> **Adressmodi (`outUserId`):**
+> * **Fester Adressmodus:** Wird `outUserId` übergeben, wird pro `(Händler, outUserId, Chain)` eine feste Adresse zugewiesen. Händler ohne aktivierten Adresspool **müssen** `outUserId` angeben, sonst wird Fehler `10502` zurückgegeben.
+> * **Adresspool-Modus:** Wird `outUserId` weggelassen (Feld auslassen/`null`, kein leerer String) und ist `address_reuse_mode=1` aktiviert, wird eine exklusive freie Adresse aus dem Pool zugewiesen. Hinweis: In diesem Modus enthalten `data.outUserId` und das Callback-Feld `outUserId` die ursprünglich an diese Pool-Adresse gebundene Benutzer-ID — verwenden Sie zum Abgleich stets `outOrderNo` / `orderNo` (`outOrderId` / `orderId`).
 
 ### Antwortparameter
 *(Enthält globale Informationen)*
@@ -292,50 +298,68 @@ Diese Schnittstelle wird von Händlern verwendet, um Zahlungs- oder Aufladeanfra
 | :--- | :--- | :--- |
 | `data.orderNo` | string | Vom System generierte eindeutige Bestell-ID |
 | `data.outOrderNo` | string | Vom Händler übermittelte ursprüngliche Bestell-ID |
-| `data.cashierUrl` | string | **Kernfeld**: Adresse der Kassenseite. Händler müssen Benutzer zu diesem Link leiten, um die Zahlung vorzunehmen. |
+| `data.outUserId` | string | Gebundene Benutzer-ID (im Adresspool-Modus die ursprüngliche Benutzer-ID der Pool-Adresse) |
+| `data.tokenId` | integer | Token-ID |
+| `data.quantity` | string | Zu zahlende Menge (als String im JSON) |
+| `data.addresses` | string | Empfangsadresse (einzelne Adresse, Groß-/Kleinschreibung beachten) |
+| `data.cashierUrl` | string | **Kernfeld**: Adresse der Kassenseite; Händler leiten Benutzer zur Zahlung dorthin weiter |
 
 ### Codebeispiel (cURL)
 ```bash
 curl --location 'https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder' \
 --header 'key: your_api_key' \
---header 'sign: your_md5_sign' \
---header 'clientSign: your_rsa_sign' \
+--header 'sign: 1b5b885633560f447f38073f964ad51b' \
+--header 'clientSign: your_rsa_sign_base64' \
 --header 'Content-Type: application/json' \
 --header 'timestamp: 1770606706659' \
---data '{  
-  "outOrderNo": "1234623",   
-  "tokenId": 6,   
-  "quantity": 0.01,   
-  "notifyUrl": "https://your-domain.com/callback"   
+--data '{
+  "outOrderNo": "1234623",
+  "outUserId": "user_10086",
+  "tokenId": 6,
+  "quantity": 0.01,
+  "notifyUrl": "https://your-domain.com/callback",
+  "orderDetail": "VIP会员充值"
 }'
 ```
+
+*(Bei aktiviertem Adresspool-Modus können `outUserId` und `orderDetail` weggelassen werden; weggelassene Felder fließen nicht in die Signatur ein.)*
 
 ---
 
 ## 9. Kassenbestellung Zahlungsbestätigung Callback (Webhook)
 
 ### Callback-Beschreibung
-Nachdem der Benutzer die Zahlung auf der Kassenseite abgeschlossen hat, sendet DogPay eine asynchrone Callback-Benachrichtigung an die vom Händler angegebene `notifyUrl`.
+Erst nach vollständiger Bezahlung (`orderStatus=2`) sendet DogPay eine asynchrone Callback-Benachrichtigung an die angegebene `notifyUrl` (oder die Standard-Callback-URL des Händlers). Teilzahlungen (`1`) und abgelaufene Bestellungen (`-1`) lösen keinen Callback aus.
 
 ### Von der Plattform initiierte HTTP-Anfrage
 * **Methode:** `POST`
-* **URL:** Vom Händler bereitgestellte `notifyUrl`
+* **URL:** Vom Händler bereitgestellte `notifyUrl` (oder Standard-Callback-URL)
 
 ### Callback-Parameter
 | Parametername | Typ | Beschreibung |
 | :--- | :--- | :--- |
-| `orderId` | string | Plattform-Systembestellnummer |
-| `outOrderId` | string | Ursprüngliche Händlerbestellnummer |
-| `orderStatus` | string | **Bestellstatus**: 2 bedeutet normalerweise erfolgreiche Zahlung |
+| `orderId` | string | Plattform-Systembestellnummer (entspricht `data.orderNo`) |
+| `outOrderId` | string | Ursprüngliche Händlerbestellnummer (entspricht `outOrderNo`) |
+| `outUserId` | string | Gebundene Benutzer-ID (siehe Hinweis zu Adressmodi) |
+| `orderType` | string | Auftragstyp (`1` = Einzahlung/Inkasso) |
+| `chainId` | string | Chain-ID |
 | `tokenId` | string | Token-ID |
-| `quantityPaid` | string | **Tatsächlich vom Benutzer bezahlte Menge** |
-| `sign` | string | **Datensignatur** (wird zur Händlerüberprüfung verwendet, um gefälschte Callbacks zu verhindern) |
+| `quantity` | string | Zu zahlende Menge |
+| `quantityPaid` | string | **Tatsächlich vom Benutzer kumulativ bezahlte Menge** |
+| `totalAmount` | string | Geschätzter Sollbetrag in USD |
+| `totalAmountPaid` | string | Geschätzter bezahlter Betrag in USD |
+| `exchangeAddress` | string | Empfangsadresse |
+| `orderStatus` | string | **Bestellstatus**: beim Callback fest auf `2` (abgeschlossen) |
+| `txHash` | string | On-Chain-Transaktions-Hash der zuletzt zugeordneten Einzahlung |
+| `createdAt` | string | Erstellungszeitpunkt der Bestellung |
+| `timestamp` | string | Callback-Zeitstempel (Millisekunden) |
+| `sign` | string | **Datensignatur** (mit dem öffentlichen Schlüssel der Plattform verifizieren) |
 
 ### Erwartete Antwort vom Händler
-Geben Sie bei erfolgreichem Empfang das folgende JSON zurück:
+Geben Sie bei erfolgreichem Empfang folgendes JSON zurück (`code` muss `"0"` oder `0` sein, sonst wiederholt die Plattform den Versuch):
 ```json
 {
-  "code": "1",
+  "code": "0",
   "message": "success"
 }
 ```

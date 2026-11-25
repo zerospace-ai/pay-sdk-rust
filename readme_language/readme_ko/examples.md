@@ -113,7 +113,7 @@ SDK 루트 디렉터리에서 `cargo build --examples` 명령을 실행하면 �
 2. `cargo run --example user_withdraw_by_open_id`를 실행합니다.
 
 #### 카셔 주문 생성
-1. `config.yaml`에서 `OutOrderNo`, `TokenId`, `Quantity`, `NotifyUrl`을 지정합니다.
+1. `config.yaml`에서 `OutOrderNo`, `OutUserId`(고정 주소 모드 필수), `TokenId`, `Quantity`, `NotifyUrl`, `OrderDetail`을 지정합니다.
 2. `cargo run --example new_order`를 실행합니다.
 
 #### 지갑 잔액 조회

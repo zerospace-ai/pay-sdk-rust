@@ -113,7 +113,7 @@ SDK 提供了快速測試各接口的命令行工具二進制文件（CLI）。
 2. 運行 `cargo run --example user_withdraw_by_open_id`。
 
 #### 創建收銀台訂單
-1. 在 `config.yaml` 中指定 `OutOrderNo`, `TokenId`, `Quantity`, `NotifyUrl`。
+1. 在 `config.yaml` 中指定 `OutOrderNo`, `OutUserId`（固定地址模式必填）, `TokenId`, `Quantity`, `NotifyUrl`, `OrderDetail`。
 2. 運行 `cargo run --example new_order`。
 
 #### 查詢錢包餘額

@@ -113,7 +113,7 @@ Stellen Sie vor dem Ausführen der Tools sicher, dass sich die konfigurierte Dat
 2. Führen Sie `cargo run --example user_withdraw_by_open_id` aus.
 
 #### Kassenbestellung erstellen
-1. Geben Sie `OutOrderNo`, `TokenId`, `Quantity` und `NotifyUrl` in `config.yaml` an.
+1. Geben Sie `OutOrderNo`, `OutUserId` (im festen Adressmodus erforderlich), `TokenId`, `Quantity`, `NotifyUrl` und `OrderDetail` in `config.yaml` an.
 2. Führen Sie `cargo run --example new_order` aus.
 
 #### Wallet-Guthaben abfragen

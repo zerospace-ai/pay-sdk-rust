@@ -113,7 +113,7 @@ Araçları çalıştırmadan önce, yapılandırılmış `config.yaml` dosyasın
 2. `cargo run --example user_withdraw_by_open_id` komutunu çalıştırın.
 
 #### Kasa Siparişi Oluştur
-1. `config.yaml` dosyasında `OutOrderNo`, `TokenId`, `Quantity` ve `NotifyUrl` bilgilerini belirtin.
+1. `config.yaml` dosyasında `OutOrderNo`, `OutUserId` (sabit adres modunda zorunlu), `TokenId`, `Quantity`, `NotifyUrl` ve `OrderDetail` bilgilerini belirtin.
 2. `cargo run --example new_order` komutunu çalıştırın.
 
 #### Cüzdan Bakiyesini Sorgula

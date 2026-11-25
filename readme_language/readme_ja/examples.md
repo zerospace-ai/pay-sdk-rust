@@ -113,7 +113,7 @@ SDK のルートディレクトリで `cargo build --examples` コマンドを�
 2. `cargo run --example user_withdraw_by_open_id` を実行します。
 
 #### レジ注文の作成
-1. `config.yaml` で `OutOrderNo`, `TokenId`, `Quantity`, `NotifyUrl` を指定します。
+1. `config.yaml` で `OutOrderNo`, `OutUserId`（固定アドレスモード時は必須）, `TokenId`, `Quantity`, `NotifyUrl`, `OrderDetail` を指定します。
 2. `cargo run --example new_order` を実行します。
 
 #### ウォレット残高照会

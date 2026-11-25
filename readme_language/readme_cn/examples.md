@@ -117,7 +117,7 @@ cargo build --examples
 2. 运行 `cargo run --example user_withdraw_by_open_id`。
 
 #### 创建收银台订单
-1. 在 `config.yaml` 中指定 `OutOrderNo`, `TokenId`, `Quantity`, `NotifyUrl`。
+1. 在 `config.yaml` 中指定 `OutOrderNo`, `OutUserId`（固定地址模式必填）, `TokenId`, `Quantity`, `NotifyUrl`, `OrderDetail`。
 2. 运行 `cargo run --example new_order`。
 
 #### 查询钱包余额

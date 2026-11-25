@@ -92,15 +92,23 @@ pub struct RequestWithdrawByOpenID {
     pub safe_check_code: String,
 }
 
+fn is_none_or_empty(opt: &Option<String>) -> bool {
+    opt.as_deref().map_or(true, str::is_empty)
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RequestNewOrder {
     #[serde(rename = "outOrderNo")]
     pub out_order_no: String,
+    #[serde(rename = "outUserId", default, skip_serializing_if = "is_none_or_empty")]
+    pub out_user_id: Option<String>,
     #[serde(rename = "tokenId")]
     pub token_id: i32,
     pub quantity: f64,
-    #[serde(rename = "notifyUrl", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "notifyUrl", default, skip_serializing_if = "is_none_or_empty")]
     pub notify_url: Option<String>,
+    #[serde(rename = "orderDetail", default, skip_serializing_if = "is_none_or_empty")]
+    pub order_detail: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

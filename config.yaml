@@ -12,8 +12,10 @@ SafeCheckCode: "202409132056666"
 CallbackUrl: ""
 ChainIDs: "56,2"
 OutOrderNo: "1234623"
+OutUserId: "user_10086"
 Quantity: 0.01
 NotifyUrl: "https://your-domain.com/callback"
+OrderDetail: "VIP membership recharge"
 WalletAddress: "rBWP4hpchFcqFwx93mED9FQ7to7obip7YP"
 ContractAddress: "XRP"
 WalletBalanceChainId: 5

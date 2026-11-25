@@ -16,24 +16,40 @@ async fn main() -> anyhow::Result<()> {
 
     let sdk = Sdk::new(sdk_config);
     let out_order_no = cfg.out_order_no.as_str();
+    let out_user_id = if cfg.out_user_id.is_empty() {
+        None
+    } else {
+        Some(cfg.out_user_id.clone())
+    };
     let token_id = cfg.token_id.parse::<i32>().unwrap_or(6);
     let quantity = cfg.quantity;
-    let notify_url = if cfg.notify_url.is_empty() { None } else { Some(cfg.notify_url.clone()) };
+    let notify_url = if cfg.notify_url.is_empty() {
+        None
+    } else {
+        Some(cfg.notify_url.clone())
+    };
+    let order_detail = if cfg.order_detail.is_empty() {
+        None
+    } else {
+        Some(cfg.order_detail.clone())
+    };
 
-    let (req_body, timestamp, sign, client_sign) = sdk.new_order(out_order_no, token_id, quantity, notify_url)?;
+    let (req_body, timestamp, sign, client_sign) =
+        sdk.new_order(out_order_no, token_id, quantity, notify_url, out_user_id, order_detail)?;
 
     let client = Client::new();
     let url = "https://vapi.dogpay.ai/sdk/api/v2/exchange/cashier/newOrder";
 
-    let resp = client.post(url)
+    let mut req_builder = client
+        .post(url)
         .header("Content-Type", "application/json")
         .header("key", sdk.config.api_key.clone())
         .header("timestamp", timestamp)
-        .header("sign", sign)
-        .header("clientSign", client_sign)
-        .body(req_body)
-        .send()
-        .await?;
+        .header("sign", sign);
+    if !client_sign.is_empty() {
+        req_builder = req_builder.header("clientSign", client_sign);
+    }
+    let resp = req_builder.body(req_body).send().await?;
 
     let body = resp.text().await?;
     println!("Response: {}", body);
@@ -43,6 +59,8 @@ async fn main() -> anyhow::Result<()> {
     if parsed.code != 1 {
         return Err(anyhow::anyhow!("Error response: {}", parsed.msg));
     }
+    println!("Deposit Address: {}", parsed.data.addresses);
+    println!("Cashier URL: {}", parsed.data.cashier_url);
 
     match rsa_utils::to_string_map(&body) {
         Ok(map_data) => {

@@ -117,7 +117,7 @@ Before running the tools, ensure that the configured `config.yaml` file is place
 2. Run `cargo run --example user_withdraw_by_open_id`.
 
 #### Create Cashier Order
-1. Specify `OutOrderNo`, `TokenId`, `Quantity`, and `NotifyUrl` in `config.yaml`.
+1. Specify `OutOrderNo`, `OutUserId` (required in fixed-address mode), `TokenId`, `Quantity`, `NotifyUrl`, and `OrderDetail` in `config.yaml`.
 2. Run `cargo run --example new_order`.
 
 #### Query Wallet Balance
